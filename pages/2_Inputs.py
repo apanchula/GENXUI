@@ -48,7 +48,7 @@ with st.sidebar:
     st.link_button(
         "📖 GenX Input Docs",
         "https://genxproject.github.io/GenX.jl/stable/User_Guide/model_input/",
-        use_container_width=True,
+        width="stretch",
     )
     st.divider()
 

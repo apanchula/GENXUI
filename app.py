@@ -76,7 +76,7 @@ with col_controls:
         elapsed = time.time() - st.session_state.start_time
         st.info(f"Running… {elapsed:.0f}s")
 
-    st.link_button("📖 GenX Docs", "https://genxproject.github.io/GenX.jl/stable/", use_container_width=True)
+    st.link_button("📖 GenX Docs", "https://genxproject.github.io/GenX.jl/stable/", width="stretch")
 
     if st.button("Clear output", disabled=st.session_state.running):
         st.session_state.output_lines = []
