@@ -62,7 +62,7 @@ with col_controls:
         "▶  Run GenX",
         disabled=st.session_state.running,
         type="primary",
-        use_container_width=True,
+        width="stretch",
     )
 
     if st.session_state.return_code is not None and not st.session_state.running:
@@ -75,6 +75,8 @@ with col_controls:
     if st.session_state.running:
         elapsed = time.time() - st.session_state.start_time
         st.info(f"Running… {elapsed:.0f}s")
+
+    st.link_button("📖 GenX Docs", "https://genxproject.github.io/GenX.jl/stable/", use_container_width=True)
 
     if st.button("Clear output", disabled=st.session_state.running):
         st.session_state.output_lines = []
