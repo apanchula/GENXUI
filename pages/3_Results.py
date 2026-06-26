@@ -56,16 +56,121 @@ def load(name: str) -> pd.DataFrame | None:
     return _read_csv(str(p), p.stat().st_mtime)
 
 
-costs_df = load("costs.csv")
-cap_df   = load("capacity.csv")
-pb_df    = load("power_balance.csv")
-rev_df   = load("NetRevenue.csv")
+costs_df      = load("costs.csv")
+cap_df        = load("capacity.csv")
+pb_df         = load("power_balance.csv")
+rev_df        = load("NetRevenue.csv")
+power_df      = load("power.csv")
+charge_df     = load("charge.csv")
+curtail_df    = load("curtailment.csv")
 
 st.title(f"Results — {case_name}")
 st.caption(f"`{results_dir}`")
 
 # ── Section 1: Key Metrics ────────────────────────────────────────────────────
 st.subheader("Key Metrics")
+
+lcoe_df: pd.DataFrame | None = None
+
+# Levelized Cost of Energy per resource
+if rev_df is not None and power_df is not None:
+    rev  = rev_df[rev_df["Resource"].astype(str) != "Total"].copy()
+
+    # power.csv is wide: rows are Zone/AnnualSum/timesteps, resource names are columns
+    annual_row = power_df[power_df["Resource"] == "AnnualSum"]
+    pwr = (
+        annual_row
+        .drop(columns=["Resource", "Total"], errors="ignore")
+        .T
+        .reset_index()
+    )
+    pwr.columns = ["Resource", "AnnualSum"]
+    pwr["AnnualSum"] = pd.to_numeric(pwr["AnnualSum"], errors="coerce")
+
+    # Identify storage resources from charge.csv (wide format, same as power.csv)
+    storage_resources: set[str] = set()
+    charge_by_resource: dict[str, float] = {}
+    if charge_df is not None:
+        charge_row = charge_df[charge_df["Resource"] == "AnnualSum"]
+        if not charge_row.empty:
+            for col in charge_df.columns:
+                if col not in ("Resource", "Total"):
+                    val = float(charge_row.iloc[0][col])
+                    charge_by_resource[col] = val
+                    if val > 0:
+                        storage_resources.add(col)
+
+    total_charge = sum(charge_by_resource.values())
+
+    def _is_vre(name: str) -> bool:
+        n = name.lower()
+        return any(k in n for k in ("pv", "solar", "wind"))
+
+    # VRE resources (solar/wind) exclusively charge storage, so all charging
+    # is subtracted from VRE generation; thermal generation is unaffected.
+    vre_resources = pwr[
+        ~pwr["Resource"].isin(storage_resources) & pwr["Resource"].apply(_is_vre)
+    ]["Resource"].tolist()
+    vre_total_gen = pwr[pwr["Resource"].isin(vre_resources)]["AnnualSum"].sum()
+
+    def _gen_to_load(resource: str, annual_sum: float) -> float:
+        if resource in storage_resources:
+            return annual_sum                          # discharge → load
+        if _is_vre(resource):
+            vre_share = annual_sum / vre_total_gen if vre_total_gen > 0 else 0.0
+            return max(0.0, annual_sum - total_charge * vre_share)  # subtract charging share
+        return annual_sum                              # thermal: no adjustment
+
+    pwr["_gen_to_load"] = pwr.apply(
+        lambda r: _gen_to_load(r["Resource"], r["AnnualSum"]), axis=1
+    )
+
+    # Curtailment per resource (same wide format as power.csv)
+    curtail_by_resource: dict[str, float] = {}
+    if curtail_df is not None:
+        curtail_row = curtail_df[curtail_df["Resource"] == "AnnualSum"]
+        if not curtail_row.empty:
+            for col in curtail_df.columns:
+                if col not in ("Resource", "Total"):
+                    curtail_by_resource[col] = float(curtail_row.iloc[0][col])
+
+    rev["_total_cost"] = rev["Cost"]
+    lcoe_df = rev[["Resource", "_total_cost"]].merge(pwr, on="Resource", how="left")
+    lcoe_df["Annual Cost ($M/yr)"]  = lcoe_df["_total_cost"] / 1e6
+    lcoe_df["Annual Gen (GWh/yr)"]  = lcoe_df["AnnualSum"]   / 1e3
+    lcoe_df["Gen to Load (GWh/yr)"] = lcoe_df["_gen_to_load"] / 1e3
+    lcoe_df["Curtailment (GWh/yr)"] = lcoe_df["Resource"].map(
+        lambda r: curtail_by_resource.get(r, 0.0) / 1e3
+    )
+    lcoe_df["Curtail %"] = lcoe_df.apply(
+        lambda r: 100 * r["Curtailment (GWh/yr)"] / (r["Annual Gen (GWh/yr)"] + r["Curtailment (GWh/yr)"])
+        if (r["Annual Gen (GWh/yr)"] + r["Curtailment (GWh/yr)"]) > 0 else None,
+        axis=1,
+    )
+    lcoe_df["LCOE ($/MWh)"] = lcoe_df.apply(
+        lambda r: r["_total_cost"] / r["AnnualSum"] if r["AnnualSum"] > 0 else None,
+        axis=1,
+    )
+    lcoe_df = lcoe_df[[
+        "Resource", "LCOE ($/MWh)", "Annual Cost ($M/yr)",
+        "Annual Gen (GWh/yr)", "Gen to Load (GWh/yr)",
+        "Curtailment (GWh/yr)", "Curtail %",
+    ]]
+
+    st.dataframe(
+        lcoe_df,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "LCOE ($/MWh)":           st.column_config.NumberColumn(format="$%.2f"),
+            "Annual Cost ($M/yr)":    st.column_config.NumberColumn(format="$%.3f"),
+            "Annual Gen (GWh/yr)":    st.column_config.NumberColumn(format="%.1f"),
+            "Gen to Load (GWh/yr)":   st.column_config.NumberColumn(format="%.1f"),
+            "Curtailment (GWh/yr)":   st.column_config.NumberColumn(format="%.1f"),
+            "Curtail %":              st.column_config.NumberColumn(format="%.1f%%"),
+        },
+    )
+    st.divider()
 
 if costs_df is not None:
     costs = costs_df.set_index("Costs")["Total"]
@@ -147,63 +252,55 @@ with col_cap:
         )
         st.plotly_chart(fig, width="stretch")
 
-        # Storage duration info
+        # Storage metrics: demand, power, energy, duration
         if not stor.empty:
-            dur_cols = st.columns(len(stor))
-            for col_d, (_, row) in zip(dur_cols, stor.iterrows()):
-                dur = row["EndEnergyCap"] / demand_mw if demand_mw > 0 else 0
-                col_d.metric(f"{row['Resource']}\nduration", f"{dur:.1f} hrs")
+            def _small_metric(col, label, value):
+                col.markdown(
+                    f"<div style='font-size:0.75rem;color:grey;margin-bottom:2px'>{label}</div>"
+                    f"<div style='font-size:0.95rem;font-weight:600'>{value}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            for _, row in stor.iterrows():
+                st.caption(row["Resource"])
+                m1, m2, m3, m4 = st.columns(4)
+                bat_power  = row["EndCap"]
+                bat_energy = row["EndEnergyCap"]
+                bat_dur    = bat_energy / bat_power if bat_power > 0 else 0
+                _small_metric(m1, "Demand Power",    f"{demand_mw:.0f} MW")
+                _small_metric(m2, "Battery Power",   f"{bat_power:.1f} MW")
+                _small_metric(m3, "Battery Energy",  f"{bat_energy:.1f} MWh")
+                _small_metric(m4, "Battery Duration",f"{bat_dur:.1f} h")
     else:
         st.warning("`capacity.csv` not found.")
 
 
 with col_pb:
-    st.subheader("Annual Generation Mix")
-    if pb_df is not None:
-        if "BalanceComponent" in pb_df.columns:
-            annual_rows = pb_df[pb_df["BalanceComponent"] == "AnnualSum"]
-            annual = annual_rows.iloc[0] if not annual_rows.empty else pb_df.iloc[0]
-        else:
-            annual = pb_df.iloc[0]
+    st.subheader("Supply to Load Mix")
+    if lcoe_df is not None:
+        pie_rows = lcoe_df[lcoe_df["Gen to Load (GWh/yr)"] > 0].copy()
+        labels     = pie_rows["Resource"].tolist()
+        values     = pie_rows["Gen to Load (GWh/yr)"].tolist()
+        pie_colors = [resource_color(r) for r in labels]
 
-        supply_cols = {
-            "Generation":            "Generation",
-            "VRE_Storage_Discharge": "VRE+Storage Discharge",
-            "Storage_Discharge":     "Storage Discharge",
-            "Nonserved_Energy":      "Unserved Energy",
-        }
-
-        labels, values, pie_colors = [], [], []
-        color_map = [COLORS["thermal"], COLORS["solar"], COLORS["storage"], "#e74c3c"]
-        for i, (col, label) in enumerate(supply_cols.items()):
-            if col in annual.index:
-                val = abs(float(annual[col]))
-                if val > 0:
-                    labels.append(label)
-                    values.append(val)
-                    pie_colors.append(color_map[i])
-
-        if labels:
-            fig = go.Figure(go.Pie(
-                labels=labels,
-                values=values,
-                hole=0.38,
-                marker_colors=pie_colors,
-                textinfo="label+percent",
-                textposition="outside",
-            ))
-            fig.update_layout(
-                height=340,
-                margin=dict(t=5, b=5, l=0, r=100),
-                showlegend=False,
-            )
-            st.plotly_chart(fig, width="stretch")
-            total_gen = sum(values)
-            st.caption(f"Total annual generation: {total_gen / 1e6:.2f} TWh")
-        else:
-            st.info("No supply data found in `power_balance.csv`.")
+        fig = go.Figure(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.38,
+            marker_colors=pie_colors,
+            textinfo="label+percent",
+            textposition="outside",
+        ))
+        fig.update_layout(
+            height=340,
+            margin=dict(t=5, b=5, l=0, r=100),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, width="stretch")
+        total_to_load = sum(values)
+        st.caption(f"Total supply to load: {total_to_load / 1e3:.3f} TWh/yr")
     else:
-        st.warning("`power_balance.csv` not found.")
+        st.warning("Run the model to see generation mix.")
 
 st.divider()
 
@@ -216,21 +313,26 @@ if rev_df is not None:
 
     inv_cols  = [c for c in ["Inv_cost_MW", "Inv_cost_MWh", "Inv_cost_charge_MW"] if c in rev.columns]
     fom_cols  = [c for c in ["Fixed_OM_cost_MW", "Fixed_OM_cost_MWh", "Fixed_OM_cost_charge_MW"] if c in rev.columns]
-    vom_cols  = [c for c in ["Var_OM_cost_out"] if c in rev.columns]
+    vom_cols  = [c for c in ["Var_OM_cost_out", "Var_OM_cost_in", "Charge_cost"] if c in rev.columns]
     fuel_cols = [c for c in ["Fuel_cost"] if c in rev.columns]
+    start_cols = [c for c in ["StartCost"] if c in rev.columns]
+    other_cols = [c for c in ["CO2SequestrationCost", "EmissionsCost"] if c in rev.columns]
 
     rev = rev.copy()
-    rev["Investment"]  = rev[inv_cols].sum(axis=1)  / M if inv_cols  else 0.0
-    rev["Fixed O&M"]   = rev[fom_cols].sum(axis=1)  / M if fom_cols  else 0.0
-    rev["Variable O&M"]= rev[vom_cols].sum(axis=1)  / M if vom_cols  else 0.0
-    rev["Fuel"]        = rev[fuel_cols].sum(axis=1) / M if fuel_cols else 0.0
+    rev["Investment"]  = rev[inv_cols].sum(axis=1)   / M if inv_cols   else 0.0
+    rev["Fixed O&M"]   = rev[fom_cols].sum(axis=1)   / M if fom_cols   else 0.0
+    rev["Variable O&M"]= rev[vom_cols].sum(axis=1)   / M if vom_cols   else 0.0
+    rev["Fuel"]        = rev[fuel_cols].sum(axis=1)  / M if fuel_cols  else 0.0
+    rev["Startup"]     = rev[start_cols].sum(axis=1) / M if start_cols else 0.0
+    rev["Other"]       = rev[other_cols].sum(axis=1) / M if other_cols else 0.0
 
-    melted = rev[["Resource", "Investment", "Fixed O&M", "Variable O&M", "Fuel"]].melt(
+    breakdown_cols = ["Investment", "Fixed O&M", "Variable O&M", "Fuel", "Startup", "Other"]
+    melted = rev[["Resource"] + breakdown_cols].melt(
         id_vars="Resource", var_name="Cost Type", value_name="$M/yr"
     )
     melted = melted[melted["$M/yr"].abs() > 0]
 
-    color_seq = ["#4682b4", "#87ceeb", "#ff8c00", "#b22222"]
+    color_seq = ["#4682b4", "#87ceeb", "#ff8c00", "#b22222", "#9b59b6", "#888888"]
     fig = px.bar(
         melted,
         x="Resource",
@@ -256,10 +358,12 @@ st.divider()
 st.subheader("Raw Data")
 
 raw_files = {
-    "costs.csv":       costs_df,
-    "capacity.csv":    cap_df,
-    "power_balance.csv": pb_df,
-    "NetRevenue.csv":  rev_df,
+    "costs.csv":          costs_df,
+    "capacity.csv":       cap_df,
+    "power.csv":          power_df,
+    "curtailment.csv":    curtail_df,
+    "power_balance.csv":  pb_df,
+    "NetRevenue.csv":     rev_df,
 }
 
 for fname, df in raw_files.items():
