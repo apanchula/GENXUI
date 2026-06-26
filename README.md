@@ -2,7 +2,9 @@
 
 A lightweight Streamlit interface for running and exploring [GenX.jl](https://github.com/GenXProject/GenX.jl) capacity expansion models.
 
-Built for single-case, single-zone models as a development and learning tool. Not intended for production multi-zone or multi-period workflows.
+Built for single-case, single-zone models as a development and learning tool. Not intended for production multi-zone or multi-period workflows (yet)
+
+Basically, I got tired of editing and looking at CSV files by that GenX.jl requires or produces. I mostly solved my problem.
 
 ---
 
