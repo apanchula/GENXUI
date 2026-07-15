@@ -63,12 +63,46 @@ rev_df        = load("NetRevenue.csv")
 power_df      = load("power.csv")
 charge_df     = load("charge.csv")
 curtail_df    = load("curtailment.csv")
+nse_df        = load("nse.csv")
 
 st.title(f"Results — {case_name}")
 st.caption(f"`{results_dir}`")
 
 # ── Section 1: Key Metrics ────────────────────────────────────────────────────
 st.subheader("Key Metrics")
+
+# Pre-compute NSE and demand totals (shared by the LCOE table and the cost metrics)
+_nse_total_mwh = 0.0
+if nse_df is not None:
+    _fc = nse_df.columns[0]
+    if "Total" in nse_df.columns:
+        _r = nse_df[nse_df[_fc].astype(str) == "AnnualSum"]
+        if not _r.empty:
+            _v = pd.to_numeric(_r["Total"].iloc[0], errors="coerce")
+            if pd.notna(_v):
+                _nse_total_mwh = float(_v)
+    elif "AnnualSum" in nse_df.columns:
+        _r = nse_df[nse_df[_fc].astype(str) == "Total"]
+        if not _r.empty:
+            _v = pd.to_numeric(_r["AnnualSum"].iloc[0], errors="coerce")
+            if pd.notna(_v):
+                _nse_total_mwh = float(_v)
+nse_gwh_total = _nse_total_mwh / 1e3
+
+_demand_total_mwh = 0.0
+if pb_df is not None:
+    _fc = pb_df.columns[0]
+    _demand_cols = [c for c in pb_df.columns if c.split(".")[0] == "Demand"]
+    if _demand_cols:
+        _r = pb_df[pb_df[_fc].astype(str) == "AnnualSum"]
+        if not _r.empty:
+            _v = pd.to_numeric(_r[_demand_cols].iloc[0], errors="coerce").fillna(0)
+            _demand_total_mwh = abs(float(_v.sum()))
+    elif "AnnualSum" in pb_df.columns:
+        _rows = pb_df[pb_df[_fc].astype(str) == "Demand"]
+        if not _rows.empty:
+            _demand_total_mwh = abs(float(pd.to_numeric(_rows["AnnualSum"], errors="coerce").fillna(0).sum()))
+demand_gwh_total = _demand_total_mwh / 1e3
 
 lcoe_df: pd.DataFrame | None = None
 
@@ -87,7 +121,7 @@ if rev_df is not None and power_df is not None:
     pwr.columns = ["Resource", "AnnualSum"]
     pwr["AnnualSum"] = pd.to_numeric(pwr["AnnualSum"], errors="coerce")
 
-    # Identify storage resources from charge.csv (wide format, same as power.csv)
+    # Identify storage/FLEX resources from charge.csv to exclude their charging from VRE gen-to-load
     storage_resources: set[str] = set()
     charge_by_resource: dict[str, float] = {}
     if charge_df is not None:
@@ -106,8 +140,6 @@ if rev_df is not None and power_df is not None:
         n = name.lower()
         return any(k in n for k in ("pv", "solar", "wind"))
 
-    # VRE resources (solar/wind) exclusively charge storage, so all charging
-    # is subtracted from VRE generation; thermal generation is unaffected.
     vre_resources = pwr[
         ~pwr["Resource"].isin(storage_resources) & pwr["Resource"].apply(_is_vre)
     ]["Resource"].tolist()
@@ -119,7 +151,7 @@ if rev_df is not None and power_df is not None:
         if _is_vre(resource):
             vre_share = annual_sum / vre_total_gen if vre_total_gen > 0 else 0.0
             return max(0.0, annual_sum - total_charge * vre_share)  # subtract charging share
-        return annual_sum                              # thermal: no adjustment
+        return annual_sum
 
     pwr["_gen_to_load"] = pwr.apply(
         lambda r: _gen_to_load(r["Resource"], r["AnnualSum"]), axis=1
@@ -134,17 +166,25 @@ if rev_df is not None and power_df is not None:
                 if col not in ("Resource", "Total"):
                     curtail_by_resource[col] = float(curtail_row.iloc[0][col])
 
-    rev["_total_cost"] = rev["Cost"]
+    # Charging cost reflects the high prices seen during unserved-energy hours rather
+    # than a true cost of the charging resource, so it's excluded here and instead
+    # attributed to the "Unserved Energy" row below.
+    _charge_cost_col = rev["Charge_cost"] if "Charge_cost" in rev.columns else 0.0
+    rev["_total_cost"] = rev["Cost"] - _charge_cost_col
+    total_charge_cost_m = float(_charge_cost_col.sum()) / 1e6 if "Charge_cost" in rev.columns else 0.0
     lcoe_df = rev[["Resource", "_total_cost"]].merge(pwr, on="Resource", how="left")
     lcoe_df["Annual Cost ($M/yr)"]  = lcoe_df["_total_cost"] / 1e6
-    lcoe_df["Annual Gen (GWh/yr)"]  = lcoe_df["AnnualSum"]   / 1e3
-    lcoe_df["Gen to Load (GWh/yr)"] = lcoe_df["_gen_to_load"] / 1e3
     lcoe_df["Curtailment (GWh/yr)"] = lcoe_df["Resource"].map(
         lambda r: curtail_by_resource.get(r, 0.0) / 1e3
     )
+    # Annual Gen = dispatch + curtailment  (total potential generation)
+    # Gen to Load = dispatch - charging share  (excludes what went to charge storage)
+    # Identity: Annual Gen = Gen to Load + Curtailment + Battery Charging
+    lcoe_df["Gen to Load (GWh/yr)"] = lcoe_df["_gen_to_load"] / 1e3
+    lcoe_df["Annual Gen (GWh/yr)"]  = lcoe_df["AnnualSum"] / 1e3 + lcoe_df["Curtailment (GWh/yr)"]
     lcoe_df["Curtail %"] = lcoe_df.apply(
-        lambda r: 100 * r["Curtailment (GWh/yr)"] / (r["Annual Gen (GWh/yr)"] + r["Curtailment (GWh/yr)"])
-        if (r["Annual Gen (GWh/yr)"] + r["Curtailment (GWh/yr)"]) > 0 else None,
+        lambda r: 100 * r["Curtailment (GWh/yr)"] / r["Annual Gen (GWh/yr)"]
+        if r["Annual Gen (GWh/yr)"] > 0 else None,
         axis=1,
     )
     lcoe_df["LCOE ($/MWh)"] = lcoe_df.apply(
@@ -156,6 +196,63 @@ if rev_df is not None and power_df is not None:
         "Annual Gen (GWh/yr)", "Gen to Load (GWh/yr)",
         "Curtailment (GWh/yr)", "Curtail %",
     ]]
+
+    # ── Aggregate rows ─────────────────────────────────────────────────────────
+    # DR Gen to Load: Demand_Response summed across all zones
+    _dr_gen_gwh = 0.0
+    if pb_df is not None:
+        _fc = pb_df.columns[0]
+        _ann = pb_df[pb_df[_fc].astype(str) == "AnnualSum"]
+        if not _ann.empty:
+            _dr_cols = [c for c in pb_df.columns if "Demand_Response" in str(c)]
+            if _dr_cols:
+                _v = pd.to_numeric(_ann[_dr_cols].iloc[0], errors="coerce").fillna(0)
+                _dr_gen_gwh = abs(float(_v.sum())) / 1e3
+
+    # DR Annual Cost: resources with "flex" in name (case-insensitive)
+    _dr_cost_m = 0.0
+    if rev_df is not None:
+        _flex_rows = rev_df[
+            rev_df["Resource"].astype(str).str.lower().str.contains("flex", na=False) &
+            (rev_df["Resource"].astype(str) != "Total")
+        ]
+        if not _flex_rows.empty:
+            _dr_cost_m = float(pd.to_numeric(_flex_rows["Cost"], errors="coerce").fillna(0).sum()) / 1e6
+
+    _dr_lcoe = _dr_cost_m * 1e6 / (_dr_gen_gwh * 1e3) if _dr_gen_gwh > 0 else None
+
+    # Nonserved Energy Gen to Load: Nonserved_Energy summed across all zones
+    _nse_gen_gwh = 0.0
+    if pb_df is not None:
+        _fc = pb_df.columns[0]
+        _ann = pb_df[pb_df[_fc].astype(str) == "AnnualSum"]
+        if not _ann.empty:
+            _nse_cols = [c for c in pb_df.columns if "Nonserved_Energy" in str(c)]
+            if _nse_cols:
+                _v = pd.to_numeric(_ann[_nse_cols].iloc[0], errors="coerce").fillna(0)
+                _nse_gen_gwh = abs(float(_v.sum())) / 1e3
+
+    extra_rows = pd.DataFrame([
+        {
+            "Resource":               "Demand Response",
+            "LCOE ($/MWh)":           _dr_lcoe,
+            "Annual Cost ($M/yr)":    _dr_cost_m if _dr_cost_m > 0 else None,
+            "Annual Gen (GWh/yr)":    None,
+            "Gen to Load (GWh/yr)":   _dr_gen_gwh,
+            "Curtailment (GWh/yr)":   None,
+            "Curtail %":              None,
+        },
+        {
+            "Resource":               "Unserved Energy",
+            "LCOE ($/MWh)":           None,
+            "Annual Cost ($M/yr)":    total_charge_cost_m if total_charge_cost_m > 0 else None,
+            "Annual Gen (GWh/yr)":    None,
+            "Gen to Load (GWh/yr)":   _nse_gen_gwh,
+            "Curtailment (GWh/yr)":   None,
+            "Curtail %":              None,
+        },
+    ])
+    lcoe_df = pd.concat([lcoe_df, extra_rows], ignore_index=True)
 
     st.dataframe(
         lcoe_df,
@@ -174,20 +271,25 @@ if rev_df is not None and power_df is not None:
 
 if costs_df is not None:
     costs = costs_df.set_index("Costs")["Total"]
-    c_total = float(costs.get("cTotal", 0)) / 1e6
     c_fix   = float(costs.get("cFix",   0)) / 1e6
     c_var   = float(costs.get("cVar",   0)) / 1e6
     c_fuel  = float(costs.get("cFuel",  0)) / 1e6
     c_nse   = float(costs.get("cNSE",   0)) / 1e6
+    # Unserved energy cost is broken out in its own metric below, so exclude it
+    # here to avoid double-counting it in the headline total.
+    c_total = float(costs.get("cTotal", 0)) / 1e6 - c_nse
 
     def pct(val):
         return f"{100 * val / c_total:.1f}% of total" if c_total else ""
+
+    nse_pct = 100.0 * nse_gwh_total / demand_gwh_total if demand_gwh_total > 0 else 0.0
+    nse_delta = f"{nse_gwh_total:.2f} GWh  ({nse_pct:.3f}% of load)"
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total System Cost",  f"${c_total:.2f}M/yr")
     col2.metric("Fixed Cost",         f"${c_fix:.2f}M/yr",         pct(c_fix))
     col3.metric("Variable + Fuel",    f"${c_var + c_fuel:.2f}M/yr", pct(c_var + c_fuel))
-    col4.metric("Unserved Energy",    f"${c_nse:.4f}M/yr")
+    col4.metric("Unserved Energy",    f"${c_nse:.4f}M/yr",          nse_delta, delta_color="off")
 else:
     st.warning("`costs.csv` not found in results.")
 
@@ -304,7 +406,59 @@ with col_pb:
 
 st.divider()
 
-# ── Section 3: Cost Breakdown ─────────────────────────────────────────────────
+# ── Section 3: Unserved Energy Timing ─────────────────────────────────────────
+st.subheader("Unserved Energy by Time of Year")
+
+if nse_df is not None:
+    _fc = nse_df.columns[0]
+    ts = nse_df[nse_df[_fc].astype(str).str.match(r"^t\d+$")]
+    if "Total" in ts.columns:
+        nse_series = pd.to_numeric(ts["Total"], errors="coerce").fillna(0).reset_index(drop=True)
+    else:
+        nse_series = pd.Series(dtype=float)
+
+    n_hours = len(nse_series)
+    if n_hours == 8760 and nse_series.sum() > 0:
+        # Reshape into a 365-day x 24-hour grid (assumes a non-leap hourly year starting Jan 1)
+        grid = nse_series.values.reshape(365, 24).T
+
+        month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+        month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+        fig = go.Figure(go.Heatmap(
+            z=grid,
+            x=list(range(1, 366)),
+            y=list(range(24)),
+            colorscale="Reds",
+            colorbar=dict(title="MW"),
+        ))
+        fig.update_layout(
+            xaxis=dict(title="Month", tickvals=month_starts, ticktext=month_labels),
+            yaxis=dict(title="Hour of Day", dtick=4),
+            height=320,
+            margin=dict(t=5, b=5, l=0, r=0),
+        )
+        st.plotly_chart(fig, width="stretch")
+    elif n_hours > 0 and nse_series.sum() > 0:
+        fig = px.area(
+            x=range(1, n_hours + 1), y=nse_series.values,
+            labels={"x": "Timestep", "y": "MW"},
+        )
+        fig.update_layout(height=280, margin=dict(t=5, b=5, l=0, r=0))
+        st.plotly_chart(fig, width="stretch")
+        st.caption(
+            f"{n_hours} timesteps found (not a full 8760-hour year), "
+            "showing unserved energy over the modeled period instead of a calendar heatmap."
+        )
+    else:
+        st.caption("No unserved energy in this case.")
+else:
+    st.caption("`nse.csv` not found.")
+
+st.divider()
+
+# ── Section 4: Cost Breakdown ─────────────────────────────────────────────────
 st.subheader("Cost Breakdown by Resource")
 
 if rev_df is not None:
@@ -313,7 +467,7 @@ if rev_df is not None:
 
     inv_cols  = [c for c in ["Inv_cost_MW", "Inv_cost_MWh", "Inv_cost_charge_MW"] if c in rev.columns]
     fom_cols  = [c for c in ["Fixed_OM_cost_MW", "Fixed_OM_cost_MWh", "Fixed_OM_cost_charge_MW"] if c in rev.columns]
-    vom_cols  = [c for c in ["Var_OM_cost_out", "Var_OM_cost_in", "Charge_cost"] if c in rev.columns]
+    vom_cols  = [c for c in ["Var_OM_cost_out", "Var_OM_cost_in"] if c in rev.columns]
     fuel_cols = [c for c in ["Fuel_cost"] if c in rev.columns]
     start_cols = [c for c in ["StartCost"] if c in rev.columns]
     other_cols = [c for c in ["CO2SequestrationCost", "EmissionsCost"] if c in rev.columns]
@@ -354,7 +508,7 @@ else:
 
 st.divider()
 
-# ── Section 4: Raw Data ───────────────────────────────────────────────────────
+# ── Section 5: Raw Data ───────────────────────────────────────────────────────
 st.subheader("Raw Data")
 
 raw_files = {

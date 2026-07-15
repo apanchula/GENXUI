@@ -21,6 +21,7 @@ for key, default in {
     "output_lines": [],
     "return_code": None,
     "start_time": None,
+    "elapsed_time": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -140,8 +141,7 @@ with col_controls:
 
     if st.session_state.return_code is not None and not st.session_state.running:
         if st.session_state.return_code == 0:
-            elapsed = time.time() - st.session_state.start_time
-            st.success(f"Completed in {elapsed:.0f}s")
+            st.success(f"Completed in {st.session_state.elapsed_time:.0f}s")
         else:
             st.error(f"Failed (exit code {st.session_state.return_code})")
 
@@ -154,6 +154,7 @@ with col_controls:
     if st.button("Clear output", disabled=st.session_state.running):
         st.session_state.output_lines = []
         st.session_state.return_code = None
+        st.session_state.elapsed_time = None
         st.rerun()
 
 with col_terminal:
@@ -191,6 +192,7 @@ if run_btn:
     st.session_state.output_lines = []
     st.session_state.return_code = None
     st.session_state.start_time = time.time()
+    st.session_state.elapsed_time = None
 
     q = queue.Queue()
     t = threading.Thread(target=stream_process, args=(case_path, q), daemon=True)
@@ -213,6 +215,7 @@ if st.session_state.running:
             elif kind == "done":
                 st.session_state.return_code = payload
                 st.session_state.running = False
+                st.session_state.elapsed_time = time.time() - st.session_state.start_time
 
         if st.session_state.running:
             time.sleep(0.25)
