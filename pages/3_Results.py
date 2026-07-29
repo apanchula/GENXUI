@@ -1,24 +1,61 @@
+from datetime import datetime
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from pathlib import Path
 
+import archive_lib
+import report_lib
+
 st.set_page_config(page_title="GenX – Results", layout="wide")
 
 GENX_ROOT = Path(__file__).parent.parent.parent / "GenX.jl"
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
+_archives = archive_lib.list_archives()
+_pending_archive = st.session_state.pop("archive_to_view", None)
+
 with st.sidebar:
     st.title("GenX Results")
 
-    cases = sorted([
-        d.name for d in GENX_ROOT.iterdir()
-        if d.is_dir() and (d / "Run.jl").exists()
-    ])
-    case_name = st.selectbox("Case", cases)
-    case_path = GENX_ROOT / case_name
-    results_dir = case_path / "results"
+    source_options = ["Live case", "Archived run"]
+    default_source = "Archived run" if _pending_archive else "Live case"
+    source = st.radio("Data source", source_options, index=source_options.index(default_source))
+
+    is_archived = source == "Archived run"
+    archive_manifest: dict | None = None
+
+    if is_archived:
+        if not _archives:
+            st.info("No archived runs yet. Archive a live run below to see it here.")
+            st.stop()
+        archive_labels = [
+            f"{m['case_name']} — {m.get('label') or 'unlabeled'} — {m['archived_at'][:19]}"
+            for m in _archives
+        ]
+        default_idx = 0
+        if _pending_archive:
+            for i, m in enumerate(_archives):
+                if m.get("archive_dir_name") == _pending_archive:
+                    default_idx = i
+                    break
+        sel_idx = st.selectbox(
+            "Archived run", range(len(_archives)),
+            format_func=lambda i: archive_labels[i], index=default_idx,
+        )
+        archive_manifest = _archives[sel_idx]
+        case_name = archive_manifest["case_name"]
+        results_dir = Path(archive_manifest["path"]) / "results"
+    else:
+        cases = sorted([
+            d.name for d in GENX_ROOT.iterdir()
+            if d.is_dir() and (d / "Run.jl").exists()
+        ])
+        case_name = st.selectbox("Case", cases)
+        case_path = GENX_ROOT / case_name
+        results_dir = case_path / "results"
 
     st.divider()
     demand_mw = st.number_input(
@@ -27,6 +64,19 @@ with st.sidebar:
         step=10.0,
         help="Used to compute storage duration (MWh ÷ MW)",
     )
+
+    if not is_archived:
+        st.divider()
+        st.markdown("**Archive this run**")
+        if st.session_state.get("running"):
+            st.caption("⚠ A run may be in progress — results shown could be stale.")
+        archive_label = st.text_input("Label (optional)", key="archive_label_input")
+        if st.button("📦 Archive this run", width="stretch"):
+            try:
+                archive_dir = archive_lib.create_archive(case_path, GENX_ROOT, label=archive_label)
+                st.success(f"Archived to `{archive_dir.name}`")
+            except archive_lib.ArchiveError as e:
+                st.error(str(e))
 
     st.link_button(
         "📖 GenX Output Docs",
@@ -66,7 +116,13 @@ curtail_df    = load("curtailment.csv")
 nse_df        = load("nse.csv")
 
 st.title(f"Results — {case_name}")
-st.caption(f"`{results_dir}`")
+if is_archived and archive_manifest is not None:
+    st.caption(
+        f"Archived run — {archive_manifest.get('label') or 'unlabeled'} — "
+        f"{archive_manifest['archived_at'][:19]} — `{results_dir}`"
+    )
+else:
+    st.caption(f"Live case — `{results_dir}`")
 
 # ── Section 1: Key Metrics ────────────────────────────────────────────────────
 st.subheader("Key Metrics")
@@ -105,6 +161,7 @@ if pb_df is not None:
 demand_gwh_total = _demand_total_mwh / 1e3
 
 lcoe_df: pd.DataFrame | None = None
+lcoe_styler = None
 
 # Levelized Cost of Energy per resource
 if rev_df is not None and power_df is not None:
@@ -293,8 +350,10 @@ if rev_df is not None and power_df is not None:
         style = "font-weight: bold" if row["Resource"] == "Total" else ""
         return [style] * len(row)
 
+    lcoe_styler = lcoe_df.style.apply(_bold_total_row, axis=1)
+
     st.dataframe(
-        lcoe_df.style.apply(_bold_total_row, axis=1),
+        lcoe_styler,
         hide_index=True,
         width="stretch",
         column_config={
@@ -338,6 +397,9 @@ if rev_df is not None and power_df is not None:
 # st.divider()
 
 # ── Section 2: Capacity + Power Balance ──────────────────────────────────────
+cap_fig = None
+pie_fig = None
+
 col_cap, col_pb = st.columns(2)
 
 COLORS = {
@@ -345,6 +407,7 @@ COLORS = {
     "solar":    "#ff8c00",
     "wind":     "#27ae60",
     "storage":  "#2ecc71",
+    "lds":      "#9b59b6",
     "other":    "#888888",
 }
 
@@ -357,6 +420,8 @@ def resource_color(name: str) -> str:
         return COLORS["solar"]
     if "wind" in n:
         return COLORS["wind"]
+    if "lds" in n:
+        return COLORS["lds"]
     if any(k in n for k in ("battery", "stor", "storage")):
         return COLORS["storage"]
     return COLORS["other"]
@@ -368,8 +433,8 @@ with col_cap:
         cap = cap_df[cap_df["Resource"].astype(str) != "Total"].copy()
         colors = [resource_color(r) for r in cap["Resource"]]
 
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
+        cap_fig = go.Figure()
+        cap_fig.add_trace(go.Bar(
             name="Power (MW)",
             x=cap["Resource"],
             y=cap["EndCap"],
@@ -378,7 +443,7 @@ with col_cap:
 
         stor = cap[cap["EndEnergyCap"] > 0]
         if not stor.empty:
-            fig.add_trace(go.Bar(
+            cap_fig.add_trace(go.Bar(
                 name="Energy (MWh)",
                 x=stor["Resource"],
                 y=stor["EndEnergyCap"],
@@ -386,7 +451,7 @@ with col_cap:
                 opacity=0.65,
             ))
 
-        fig.update_layout(
+        cap_fig.update_layout(
             barmode="group",
             yaxis_title="Capacity",
             xaxis_tickangle=-20,
@@ -394,7 +459,7 @@ with col_cap:
             margin=dict(t=5, b=5, l=0, r=0),
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(cap_fig, width="stretch")
 
         # Storage metrics: demand, power, energy, duration
         if not stor.empty:
@@ -429,7 +494,7 @@ with col_pb:
         values     = pie_rows["Gen to Load (GWh/yr)"].tolist()
         pie_colors = [resource_color(r) for r in labels]
 
-        fig = go.Figure(go.Pie(
+        pie_fig = go.Figure(go.Pie(
             labels=labels,
             values=values,
             hole=0.38,
@@ -437,12 +502,12 @@ with col_pb:
             textinfo="label+percent",
             textposition="outside",
         ))
-        fig.update_layout(
+        pie_fig.update_layout(
             height=340,
-            margin=dict(t=5, b=5, l=0, r=100),
+            margin=dict(t=30, b=40, l=0, r=100),
             showlegend=False,
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(pie_fig, width="stretch")
         total_to_load = sum(values)
         st.caption(f"Total supply to load: {total_to_load / 1e3:.3f} TWh/yr")
     else:
@@ -452,6 +517,8 @@ st.divider()
 
 # ── Section 3: Unserved Energy Timing ─────────────────────────────────────────
 st.subheader("Unserved Energy by Time of Year")
+
+nse_fig = None
 
 if nse_df is not None:
     _fc = nse_df.columns[0]
@@ -470,27 +537,27 @@ if nse_df is not None:
         month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-        fig = go.Figure(go.Heatmap(
+        nse_fig = go.Figure(go.Heatmap(
             z=grid,
             x=list(range(1, 366)),
             y=list(range(24)),
             colorscale="Reds",
             colorbar=dict(title="MW"),
         ))
-        fig.update_layout(
+        nse_fig.update_layout(
             xaxis=dict(title="Month", tickvals=month_starts, ticktext=month_labels),
             yaxis=dict(title="Hour of Day", dtick=4),
             height=320,
             margin=dict(t=5, b=5, l=0, r=0),
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(nse_fig, width="stretch")
     elif n_hours > 0 and nse_series.sum() > 0:
-        fig = px.area(
+        nse_fig = px.area(
             x=range(1, n_hours + 1), y=nse_series.values,
             labels={"x": "Timestep", "y": "MW"},
         )
-        fig.update_layout(height=280, margin=dict(t=5, b=5, l=0, r=0))
-        st.plotly_chart(fig, width="stretch")
+        nse_fig.update_layout(height=280, margin=dict(t=5, b=5, l=0, r=0))
+        st.plotly_chart(nse_fig, width="stretch")
         st.caption(
             f"{n_hours} timesteps found (not a full 8760-hour year), "
             "showing unserved energy over the modeled period instead of a calendar heatmap."
@@ -504,6 +571,8 @@ st.divider()
 
 # ── Section 4: Cost Breakdown ─────────────────────────────────────────────────
 st.subheader("Cost Breakdown by Resource")
+
+cost_fig = None
 
 if rev_df is not None:
     rev = rev_df[rev_df["Resource"].astype(str) != "Total"].copy()
@@ -531,7 +600,7 @@ if rev_df is not None:
     melted = melted[melted["$M/yr"].abs() > 0]
 
     color_seq = ["#4682b4", "#87ceeb", "#ff8c00", "#b22222", "#9b59b6", "#888888"]
-    fig = px.bar(
+    cost_fig = px.bar(
         melted,
         x="Resource",
         y="$M/yr",
@@ -539,16 +608,52 @@ if rev_df is not None:
         color_discrete_sequence=color_seq,
         barmode="stack",
     )
-    fig.update_layout(
+    cost_fig.update_layout(
         yaxis_title="$M / yr",
         xaxis_tickangle=-20,
         height=360,
         margin=dict(t=5, b=5, l=0, r=0),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(cost_fig, width="stretch")
 else:
     st.warning("`NetRevenue.csv` not found.")
+
+st.divider()
+
+# ── Export ────────────────────────────────────────────────────────────────────
+st.subheader("Export")
+
+_report_styler = None
+if lcoe_df is not None:
+    _report_styler = lcoe_df.style.apply(_bold_total_row, axis=1).format(
+        {
+            "LCOE ($/MWh)":           "${:.2f}",
+            "Hardware Cost ($M/yr)":  "${:.3f}",
+            "Charging Cost ($M/yr)":  "${:.3f}",
+            "Annual Gen (GWh/yr)":    "{:.1f}",
+            "Gen to Load (GWh/yr)":   "{:.1f}",
+            "Curtailment (GWh/yr)":   "{:.1f}",
+            "Curtail %":              "{:.1f}%",
+        },
+        na_rep="",
+    )
+
+_report_html = report_lib.build_results_html(
+    case_label=case_name,
+    generated_at=datetime.now(),
+    lcoe_styler=_report_styler,
+    cap_fig=cap_fig,
+    pie_fig=pie_fig,
+    nse_fig=nse_fig,
+    cost_fig=cost_fig,
+)
+st.download_button(
+    "⬇ Export report (HTML)",
+    data=_report_html,
+    file_name=f"genx_results_{case_name}_{datetime.now():%Y%m%d-%H%M%S}.html",
+    mime="text/html",
+)
 
 st.divider()
 

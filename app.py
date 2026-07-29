@@ -6,6 +6,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+import archive_lib
+
 st.set_page_config(page_title="GenX UI", layout="wide")
 
 GENX_ROOT = Path(__file__).parent.parent / "GenX.jl"
@@ -126,7 +128,11 @@ col_controls, col_terminal = st.columns([1, 2])
 
 with col_controls:
     st.subheader("Case")
-    case_name = st.selectbox("Select case", CASES)
+
+    _preselect_case = st.session_state.pop("_preselect_case", None)
+    _preselect_idx = CASES.index(_preselect_case) if _preselect_case in CASES else 0
+
+    case_name = st.selectbox("Select case", CASES, index=_preselect_idx)
     case_path = GENX_ROOT / case_name
 
     st.caption(f"`{case_path}`")
@@ -142,6 +148,13 @@ with col_controls:
     if st.session_state.return_code is not None and not st.session_state.running:
         if st.session_state.return_code == 0:
             st.success(f"Completed in {st.session_state.elapsed_time:.0f}s")
+            archive_label = st.text_input("Archive label (optional)", key="runner_archive_label")
+            if st.button("📦 Archive this run", width="stretch"):
+                try:
+                    archive_dir = archive_lib.create_archive(case_path, GENX_ROOT, label=archive_label)
+                    st.success(f"Archived to `{archive_dir.name}`")
+                except archive_lib.ArchiveError as e:
+                    st.error(str(e))
         else:
             st.error(f"Failed (exit code {st.session_state.return_code})")
 
