@@ -18,6 +18,19 @@ Basically, I got tired of editing and looking at CSV files by that GenX.jl requi
 
 ---
 
+## Screenshots
+
+**Runner**
+![Runner page](screenshots/App.png)
+
+**Inputs**
+![Inputs page](screenshots/Inputs.png)
+
+**Results**
+![Results page](screenshots/Results.png)
+
+---
+
 ## Prerequisites
 
 ### 1. Julia
@@ -55,7 +68,7 @@ parent/
 │   │   └── settings/
 │   └── ...
 └── GenXUI/           # this repo
-    ├── app.py
+    ├── App.py
     └── pages/
 ```
 
@@ -78,7 +91,7 @@ pip install -r requirements.txt
 From the `GenXUI/` directory:
 
 ```bash
-python -m streamlit run app.py
+python -m streamlit run App.py
 ```
 
 Then open [http://localhost:8501](http://localhost:8501) in your browser.

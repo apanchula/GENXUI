@@ -135,7 +135,7 @@ with col_controls:
     case_name = st.selectbox("Select case", CASES, index=_preselect_idx)
     case_path = GENX_ROOT / case_name
 
-    st.caption(f"`{case_path}`")
+    st.caption(f"`{archive_lib.short_path(case_path, GENX_ROOT)}`")
     st.divider()
 
     run_btn = st.button(

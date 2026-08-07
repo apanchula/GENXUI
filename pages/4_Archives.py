@@ -9,7 +9,7 @@ st.set_page_config(page_title="GenX – Archives", layout="wide")
 GENX_ROOT = Path(__file__).parent.parent.parent / "GenX.jl"
 
 st.title("Archives")
-st.caption(f"`{archive_lib.ARCHIVE_ROOT}`")
+st.caption(f"`{archive_lib.short_path(archive_lib.ARCHIVE_ROOT, GENX_ROOT.parent)}`")
 
 archives = archive_lib.list_archives()
 
@@ -107,4 +107,4 @@ with col_actions:
         if st.button("▶ Go to Runner", width="stretch", disabled=go_disabled):
             st.session_state["_preselect_case"] = restored_case
             del st.session_state["_restored_case"]
-            st.switch_page("app.py")
+            st.switch_page("App.py")

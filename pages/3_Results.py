@@ -119,10 +119,11 @@ st.title(f"Results — {case_name}")
 if is_archived and archive_manifest is not None:
     st.caption(
         f"Archived run — {archive_manifest.get('label') or 'unlabeled'} — "
-        f"{archive_manifest['archived_at'][:19]} — `{results_dir}`"
+        f"{archive_manifest['archived_at'][:19]} — "
+        f"`{archive_lib.short_path(results_dir, archive_lib.ARCHIVE_ROOT)}`"
     )
 else:
-    st.caption(f"Live case — `{results_dir}`")
+    st.caption(f"Live case — `{archive_lib.short_path(results_dir, GENX_ROOT)}`")
 
 # ── Section 1: Key Metrics ────────────────────────────────────────────────────
 st.subheader("Key Metrics")
@@ -618,6 +619,35 @@ if rev_df is not None:
     st.plotly_chart(cost_fig, width="stretch")
 else:
     st.warning("`NetRevenue.csv` not found.")
+
+st.divider()
+
+# ── Section 4b: Hourly Curtailment ────────────────────────────────────────────
+st.subheader("Hourly Curtailment")
+
+if curtail_df is not None:
+    _fc = curtail_df.columns[0]
+    curt_ts = curtail_df[curtail_df[_fc].astype(str).str.match(r"^t\d+$")].copy()
+    series_cols = [c for c in curt_ts.columns if c != _fc and "pv" in c.lower()]
+    if not curt_ts.empty and series_cols:
+        curt_ts["Hour"] = curt_ts[_fc].astype(str).str[1:].astype(int)
+        for c in series_cols:
+            curt_ts[c] = pd.to_numeric(curt_ts[c], errors="coerce")
+        plot_df = curt_ts[["Hour"] + series_cols].dropna(how="all", subset=series_cols)
+        step = max(1, len(plot_df) // 500)
+        sampled = plot_df.iloc[::step]
+
+        curt_fig = px.line(sampled, x="Hour", y=series_cols, labels={"value": "MW"})
+        curt_fig.update_layout(
+            height=250,
+            margin=dict(t=5, b=5, l=0, r=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, title=None),
+        )
+        st.plotly_chart(curt_fig, width="stretch")
+    else:
+        st.caption("No hourly PV curtailment data found.")
+else:
+    st.caption("`curtailment.csv` not found.")
 
 st.divider()
 

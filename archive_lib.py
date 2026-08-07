@@ -33,6 +33,15 @@ class ArchiveError(Exception):
     """Raised for any user-facing archive/restore failure."""
 
 
+def short_path(path: Path, root: Path) -> str:
+    """Render `path` relative to `root` with a leading backslash, for display."""
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return str(path)
+    return f"\\{rel.as_posix().replace('/', chr(92))}"
+
+
 def sanitize_label(label: str | None) -> str | None:
     if not label:
         return None

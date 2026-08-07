@@ -3,6 +3,8 @@ import streamlit as st
 import yaml
 from pathlib import Path
 
+import archive_lib
+
 st.set_page_config(page_title="GenX – Inputs", layout="wide")
 
 GENX_ROOT = Path(__file__).parent.parent.parent / "GenX.jl"
@@ -107,7 +109,7 @@ if not sel_path.exists():
 col_title, col_reload = st.columns([5, 1])
 with col_title:
     st.title(sel_path.name)
-    st.caption(f"`{sel_path}`")
+    st.caption(f"`{archive_lib.short_path(sel_path, GENX_ROOT)}`")
 with col_reload:
     st.write("")
     if st.button("🔄 Reload", help="Discard unsaved edits and reload from disk"):
