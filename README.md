@@ -6,6 +6,9 @@ Built for single-case, single-zone models as a development and learning tool. No
 
 Basically, I got tired of editing and looking at CSV files by that GenX.jl requires or produces. I mostly solved my problem.
 
+Confirmed working with Storage: model = 1 (symmetric charging/discharging) and model = 2 (asymmetric chargeing/discharging). Metric appear correctly.
+Confirmed working with VRE: 8760 imported separately--not yet integrated into UI.
+
 ---
 
 ## Features
