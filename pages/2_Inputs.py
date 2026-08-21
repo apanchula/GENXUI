@@ -23,7 +23,9 @@ with st.sidebar:
         d.name for d in GENX_ROOT.iterdir()
         if d.is_dir() and (d / "Run.jl").exists()
     ])
-    case_name = st.selectbox("Case", cases)
+    _default_case = st.session_state.get("selected_case")
+    _default_idx = cases.index(_default_case) if _default_case in cases else 0
+    case_name = st.selectbox("Case", cases, index=_default_idx)
     case_path = GENX_ROOT / case_name
 
     st.divider()

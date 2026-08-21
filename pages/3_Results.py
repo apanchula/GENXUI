@@ -48,14 +48,18 @@ with st.sidebar:
         archive_manifest = _archives[sel_idx]
         case_name = archive_manifest["case_name"]
         results_dir = Path(archive_manifest["path"]) / "results"
+        inputs_dir = Path(archive_manifest["path"]) / "inputs"
     else:
         cases = sorted([
             d.name for d in GENX_ROOT.iterdir()
             if d.is_dir() and (d / "Run.jl").exists()
         ])
-        case_name = st.selectbox("Case", cases)
+        _default_case = st.session_state.get("selected_case")
+        _default_idx = cases.index(_default_case) if _default_case in cases else 0
+        case_name = st.selectbox("Case", cases, index=_default_idx)
         case_path = GENX_ROOT / case_name
         results_dir = case_path / "results"
+        inputs_dir = case_path
 
     st.divider()
     demand_mw = st.number_input(
@@ -114,6 +118,138 @@ power_df      = load("power.csv")
 charge_df     = load("charge.csv")
 curtail_df    = load("curtailment.csv")
 nse_df        = load("nse.csv")
+prices_df     = load("prices.csv")
+
+
+# ── Storage charging-source inference ────────────────────────────────────────
+# GenX has no notion of "which generator charged storage" — it's a single zonal
+# energy balance. This infers a likely source per hour by matching the zonal
+# shadow price (prices.csv) against each candidate resource's known marginal
+# cost, since that's the actual signal the LP used to make its dispatch choice.
+@st.cache_data
+def _compute_charging_source(inputs_dir_str: str, results_dir_str: str, cache_key: str) -> pd.DataFrame:
+    inputs_p = Path(inputs_dir_str)
+    results_p = Path(results_dir_str)
+
+    def _read(p: Path):
+        return pd.read_csv(p) if p.exists() else None
+
+    thermal_df = _read(inputs_p / "resources" / "Thermal.csv")
+    vre_df     = _read(inputs_p / "resources" / "Vre.csv")
+    storage_df = _read(inputs_p / "resources" / "Storage.csv")
+    fuels_df   = _read(inputs_p / "system" / "Fuels_data.csv")
+    prices_in  = _read(results_p / "prices.csv")
+    charge_in  = _read(results_p / "charge.csv")
+    pb_in      = _read(results_p / "power_balance.csv")
+    cap_in     = _read(results_p / "capacity.csv")
+
+    empty = pd.DataFrame(columns=["Storage", "Hour", "Bucket", "MWh"])
+    if any(df is None for df in (thermal_df, storage_df, fuels_df, prices_in, charge_in)):
+        return empty
+
+    _pc = prices_in.columns[0]
+    price_ts = prices_in[prices_in[_pc].astype(str).str.match(r"^t\d+$")].reset_index(drop=True)
+    T = len(price_ts)
+    if T == 0:
+        return empty
+    hours = list(range(1, T + 1))
+    price_ts.index = hours
+
+    fuels_indexed = fuels_df.set_index("Time_Index")
+
+    def _fuel_price_series(fuel_name):
+        if fuel_name not in fuels_indexed.columns:
+            return pd.Series(0.0, index=hours)
+        s = fuels_indexed[fuel_name]
+        return pd.Series([float(s.get(h, 0.0)) for h in hours], index=hours)
+
+    thermal_cost = {}
+    for _, row in thermal_df.iterrows():
+        name = row["Resource"]
+        zone = int(float(row["Zone"]))
+        heat_rate = float(row.get("Heat_Rate_MMBTU_per_MWh", 0) or 0)
+        var_om = float(row.get("Var_OM_Cost_per_MWh", 0) or 0)
+        thermal_cost[name] = {
+            "zone": zone,
+            "cost": var_om + heat_rate * _fuel_price_series(row.get("Fuel")),
+        }
+
+    vre_zone = {}
+    if vre_df is not None:
+        vre_zone = {row["Resource"]: int(float(row["Zone"])) for _, row in vre_df.iterrows()}
+    vre_zones_present = set(vre_zone.values())
+
+    nse_by_zone = {}
+    if pb_in is not None:
+        _bc = pb_in.columns[0]
+        zone_row = pb_in[pb_in[_bc].astype(str) == "Zone"]
+        ts_rows = pb_in[pb_in[_bc].astype(str).str.match(r"^t\d+$")].reset_index(drop=True)
+        ts_rows.index = hours
+        if not zone_row.empty:
+            zone_of_col = zone_row.iloc[0].to_dict()
+            nse_cols = [c for c in pb_in.columns if c.split(".")[0] == "Nonserved_Energy"]
+            zones_present = set()
+            for c in nse_cols:
+                try:
+                    zones_present.add(int(float(zone_of_col[c])))
+                except (TypeError, ValueError):
+                    pass
+            for zone in zones_present:
+                cols = [c for c in nse_cols if int(float(zone_of_col[c])) == zone]
+                nse_by_zone[zone] = pd.to_numeric(ts_rows[cols].sum(axis=1), errors="coerce").fillna(0.0)
+
+    storage_zone = {row["Resource"]: int(float(row["Zone"])) for _, row in storage_df.iterrows()}
+
+    # Exclude storage assets the model didn't actually build (zero energy capacity result)
+    if cap_in is not None and "EndEnergyCap" in cap_in.columns:
+        built_storage = set(cap_in[pd.to_numeric(cap_in["EndEnergyCap"], errors="coerce").fillna(0.0) > 0]["Resource"])
+        storage_zone = {name: zone for name, zone in storage_zone.items() if name in built_storage}
+
+    _chc = charge_in.columns[0]
+    charge_ts = charge_in[charge_in[_chc].astype(str).str.match(r"^t\d+$")].reset_index(drop=True)
+    charge_ts.index = hours
+
+    TOL_REL = 0.02
+    TOL_ABS = 0.5
+
+    def _classify(price, candidates, nse):
+        if nse > 1e-3:
+            return "Reliability shortfall"
+        best_name, best_diff = None, None
+        for name, cost in candidates.items():
+            diff = abs(price - cost)
+            tol = max(TOL_ABS, TOL_REL * max(price, cost, 1))
+            if diff <= tol and (best_diff is None or diff < best_diff):
+                best_name, best_diff = name, diff
+        return best_name if best_name else "Unclassified"
+
+    records = []
+    for stor_name, zone in storage_zone.items():
+        if stor_name not in charge_ts.columns:
+            continue
+        zone_col = str(zone)
+        if zone_col not in price_ts.columns:
+            continue
+        price_s = pd.to_numeric(price_ts[zone_col], errors="coerce").fillna(0.0)
+        nse_s = nse_by_zone.get(zone)
+        candidates = {name: info["cost"] for name, info in thermal_cost.items() if info["zone"] == zone}
+        has_vre = zone in vre_zones_present
+        charge_s = pd.to_numeric(charge_ts[stor_name], errors="coerce").fillna(0.0)
+
+        for h in hours:
+            c = charge_s[h]
+            if c <= 1e-6:
+                continue
+            cand_at_h = {name: series[h] for name, series in candidates.items()}
+            if has_vre:
+                # A zero-price hour reveals surplus (otherwise-curtailed) VRE was the
+                # marginal resource, even if leftover curtailment is exactly 0 that
+                # hour because the charging itself absorbed what would've been curtailed.
+                cand_at_h["Curtailed VRE"] = 0.0
+            bucket = _classify(price_s[h], cand_at_h, nse_s[h] if nse_s is not None else 0.0)
+            records.append({"Storage": stor_name, "Hour": h, "Bucket": bucket, "MWh": c})
+
+    return pd.DataFrame(records, columns=["Storage", "Hour", "Bucket", "MWh"])
 
 st.title(f"Results — {case_name}")
 if is_archived and archive_manifest is not None:
@@ -409,6 +545,7 @@ COLORS = {
     "wind":     "#27ae60",
     "storage":  "#2ecc71",
     "lds":      "#9b59b6",
+    "grid":     "#f1c40f",
     "other":    "#888888",
 }
 
@@ -425,6 +562,8 @@ def resource_color(name: str) -> str:
         return COLORS["lds"]
     if any(k in n for k in ("battery", "stor", "storage")):
         return COLORS["storage"]
+    if "grid" in n:
+        return COLORS["grid"]
     return COLORS["other"]
 
 
@@ -473,14 +612,21 @@ with col_cap:
 
             for _, row in stor.iterrows():
                 st.caption(row["Resource"])
-                m1, m2, m3, m4 = st.columns(4)
-                bat_power  = row["EndCap"]
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
+                bat_discharge_power = row["EndCap"]
+                bat_charge_cap      = row.get("EndChargeCap", 0.0) or 0.0
+                # Symmetric storage has no separate charge investment (EndChargeCap == 0),
+                # so its charge power equals its discharge power rating.
+                bat_charge_power = bat_charge_cap if bat_charge_cap > 0 else bat_discharge_power
                 bat_energy = row["EndEnergyCap"]
-                bat_dur    = bat_energy / bat_power if bat_power > 0 else 0
-                _small_metric(m1, "Demand Power",    f"{demand_mw:.0f} MW")
-                _small_metric(m2, "Battery Power",   f"{bat_power:.1f} MW")
-                _small_metric(m3, "Battery Energy",  f"{bat_energy:.1f} MWh")
-                _small_metric(m4, "Battery Duration",f"{bat_dur:.1f} h")
+                bat_dur    = bat_energy / bat_discharge_power if bat_discharge_power > 0 else 0
+                bat_charge_time = bat_energy / bat_charge_power if bat_charge_power > 0 else 0
+                _small_metric(m1, "Demand Power",       f"{demand_mw:.0f} MW")
+                _small_metric(m2, "Discharge Power",    f"{bat_discharge_power:.1f} MW")
+                _small_metric(m3, "Charge Power",       f"{bat_charge_power:.1f} MW")
+                _small_metric(m4, "Battery Energy",     f"{bat_energy:.1f} MWh")
+                _small_metric(m5, "Battery Duration",   f"{bat_dur:.1f} h")
+                _small_metric(m6, "Min Charge Time",    f"{bat_charge_time:.1f} h")
     else:
         st.warning("`capacity.csv` not found.")
 
@@ -504,13 +650,11 @@ with col_pb:
             textposition="outside",
         ))
         pie_fig.update_layout(
-            height=340,
-            margin=dict(t=30, b=40, l=0, r=100),
+            height=380,
+            margin=dict(t=30, b=80, l=0, r=100),
             showlegend=False,
         )
         st.plotly_chart(pie_fig, width="stretch")
-        total_to_load = sum(values)
-        st.caption(f"Total supply to load: {total_to_load / 1e3:.3f} TWh/yr")
     else:
         st.warning("Run the model to see generation mix.")
 
@@ -542,7 +686,7 @@ if nse_df is not None:
             z=grid,
             x=list(range(1, 366)),
             y=list(range(24)),
-            colorscale="Reds",
+            colorscale=[[0, "#1a7a4a"], [1, "#ffffff"]],  # was: colorscale="Reds"
             colorbar=dict(title="MW"),
         ))
         nse_fig.update_layout(
@@ -648,6 +792,106 @@ if curtail_df is not None:
         st.caption("No hourly PV curtailment data found.")
 else:
     st.caption("`curtailment.csv` not found.")
+
+st.divider()
+
+# ── Section 4c: Hourly Power by Resource ──────────────────────────────────────
+st.subheader("Hourly Power by Resource")
+
+if power_df is not None:
+    _fc = power_df.columns[0]
+    pwr_ts = power_df[power_df[_fc].astype(str).str.match(r"^t\d+$")].copy()
+    resource_cols = [c for c in power_df.columns if c != _fc]
+    if not pwr_ts.empty and resource_cols:
+        selected_resource = st.selectbox("Resource", resource_cols, key="power_resource_select")
+        pwr_ts["Hour"] = pwr_ts[_fc].astype(str).str[1:].astype(int)
+        pwr_ts[selected_resource] = pd.to_numeric(pwr_ts[selected_resource], errors="coerce")
+        plot_df = pwr_ts[["Hour", selected_resource]].dropna(subset=[selected_resource])
+        step = max(1, len(plot_df) // 500)
+        sampled = plot_df.iloc[::step]
+
+        power_fig = px.line(sampled, x="Hour", y=selected_resource, labels={selected_resource: "MW"})
+        power_fig.update_layout(height=280, margin=dict(t=5, b=5, l=0, r=0))
+        st.plotly_chart(power_fig, width="stretch")
+    else:
+        st.caption("No hourly power data found.")
+else:
+    st.caption("`power.csv` not found.")
+
+st.divider()
+
+# ── Section 4d: Storage Charging Source ───────────────────────────────────────
+st.subheader("Storage Charging Source")
+st.caption(
+    "GenX doesn't track which generator's energy charges storage — it's a single "
+    "zonal energy balance. This infers a likely source per hour by matching the "
+    "zonal shadow price against each resource's known marginal cost. Treat this as "
+    "a derived economic interpretation, not a physically tracked flow."
+)
+
+_source_mtimes = []
+for _rel in ["resources/Thermal.csv", "resources/Vre.csv", "resources/Storage.csv", "system/Fuels_data.csv"]:
+    _p = inputs_dir / _rel
+    if _p.exists():
+        _source_mtimes.append(_p.stat().st_mtime)
+for _rel in ["prices.csv", "charge.csv", "power_balance.csv", "capacity.csv"]:
+    _p = results_dir / _rel
+    if _p.exists():
+        _source_mtimes.append(_p.stat().st_mtime)
+_source_cache_key = str(max(_source_mtimes)) if _source_mtimes else "0"
+
+charge_source_df = _compute_charging_source(str(inputs_dir), str(results_dir), _source_cache_key)
+
+if charge_source_df.empty:
+    st.caption(
+        "Need `prices.csv`, `charge.csv`, and case inputs (Thermal.csv, Storage.csv, "
+        "Fuels_data.csv) to derive charging source."
+    )
+else:
+    _summary = charge_source_df.groupby(["Storage", "Bucket"])["MWh"].sum().reset_index()
+    _pivot = _summary.pivot(index="Bucket", columns="Storage", values="MWh").fillna(0.0)
+    _pct = _pivot.div(_pivot.sum(axis=0), axis=1) * 100
+    _pivot_with_total = pd.concat([_pivot, _pivot.sum(axis=0).to_frame("Total").T])
+
+    col_src_tab, col_src_chart = st.columns([1, 1.4])
+
+    with col_src_tab:
+        st.caption("Annual charging by inferred source (MWh)")
+        st.dataframe(_pivot_with_total.style.format("{:,.0f}"), width="stretch")
+        st.caption("Share of each resource's total charging (%)")
+        st.dataframe(_pct.style.format("{:,.1f}%"), width="stretch")
+
+    with col_src_chart:
+        _stor_options = sorted(charge_source_df["Storage"].unique())
+        _sel_stor = st.selectbox("Storage resource", _stor_options, key="charge_source_resource")
+
+        _sub = charge_source_df[charge_source_df["Storage"] == _sel_stor].copy()
+        _sub["Day"] = ((_sub["Hour"] - 1) // 24) + 1
+        _daily = _sub.groupby(["Day", "Bucket"], as_index=False)["MWh"].sum()
+
+        _bucket_colors = {
+            "Curtailed VRE": "#27ae60",
+            "Reliability shortfall": "#b22222",
+            "Unclassified": "#888888",
+        }
+        _color_map = {b: _bucket_colors.get(b, resource_color(b)) for b in _daily["Bucket"].unique()}
+
+        source_fig = px.bar(_daily, x="Day", y="MWh", color="Bucket", color_discrete_map=_color_map)
+        source_fig.update_layout(
+            barmode="stack",
+            yaxis_title="MWh/day",
+            height=320,
+            margin=dict(t=5, b=5, l=0, r=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, title=None),
+        )
+        st.plotly_chart(source_fig, width="stretch")
+
+    st.caption(
+        "Classification matches each hour's zonal shadow price to a resource's "
+        "marginal cost (±2% or $0.50 tolerance). 'Unclassified' hours had a price "
+        "that didn't clearly match any candidate — often solver-tolerance noise or "
+        "degenerate unit-commitment pricing."
+    )
 
 st.divider()
 

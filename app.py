@@ -82,7 +82,7 @@ def _build_summary(cache_key: str) -> pd.DataFrame:
                 "Resource":           r["Resource"],
                 "Type":               rtype,
                 "New Build":          "Yes" if int(new_build) == 1 else "No",
-                "Max Cap (MW)":       "∞" if float(max_cap) < 0 else float(max_cap),
+                "Max Cap (MW)":       "∞" if float(max_cap) < 0 else f"{float(max_cap):,.1f}",
                 "Inv ($/MW-yr)":      float(r.get("Inv_Cost_per_MWyr", 0) or 0),
                 "Inv ($/MWh-yr)":     float(r["Inv_Cost_per_MWhyr"]) if rtype in ("Storage", "VRE+Storage") and "Inv_Cost_per_MWhyr" in r.index else None,
                 "Fixed O&M ($/MW-yr)": float(r.get("Fixed_OM_Cost_per_MWyr", 0) or 0),
@@ -129,13 +129,27 @@ col_controls, col_terminal = st.columns([1, 2])
 with col_controls:
     st.subheader("Case")
 
-    _preselect_case = st.session_state.pop("_preselect_case", None)
-    _preselect_idx = CASES.index(_preselect_case) if _preselect_case in CASES else 0
+    if "app_case_select" not in st.session_state:
+        _initial = st.session_state.get("selected_case")
+        st.session_state["app_case_select"] = _initial if _initial in CASES else CASES[0]
 
-    case_name = st.selectbox("Select case", CASES, index=_preselect_idx)
+    _preselect_case = st.session_state.pop("_preselect_case", None)
+    if _preselect_case in CASES:
+        st.session_state["app_case_select"] = _preselect_case
+
+    case_name = st.selectbox("Select case", CASES, key="app_case_select")
     case_path = GENX_ROOT / case_name
 
     st.caption(f"`{archive_lib.short_path(case_path, GENX_ROOT)}`")
+
+    if st.button("📌 Set as default case", width="stretch"):
+        st.session_state["selected_case"] = case_name
+        st.toast(f"Default case set to **{case_name}** for Inputs and Results pages", icon="📌")
+
+    _default_case = st.session_state.get("selected_case")
+    if _default_case:
+        st.caption(f"Default for Inputs/Results pages: **{_default_case}**")
+
     st.divider()
 
     run_btn = st.button(
