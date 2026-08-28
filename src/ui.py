@@ -20,3 +20,9 @@ _CSS = """
 
 def compact_layout() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def sidebar_brand() -> None:
+    """The 'GenXUI' header at the top of every page's sidebar. Same size as the
+    sidebar section subheaders (st.subheader)."""
+    st.sidebar.subheader("GenXUI")

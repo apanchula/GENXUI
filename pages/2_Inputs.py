@@ -12,6 +12,7 @@ from src import fleet_view, help_docs, ui, workspace
 
 st.set_page_config(page_title="GenX – Inputs", layout="wide")
 ui.compact_layout()
+ui.sidebar_brand()
 
 if workspace.get_workspace_root() is None:
     st.title("Inputs")
@@ -28,7 +29,7 @@ if "inputs_selected" not in st.session_state:
 
 # ── Sidebar: case selector + file tree ───────────────────────────────────────
 with st.sidebar:
-    st.title("GenX Inputs")
+    st.subheader("Case")
 
     cases = workspace.discover_cases()
     if not cases:
@@ -37,7 +38,7 @@ with st.sidebar:
 
     _default_case = st.session_state.get("selected_case")
     _default_idx = cases.index(_default_case) if _default_case in cases else 0
-    case_name = st.selectbox("Case", cases, index=_default_idx)
+    case_name = st.selectbox("Case", cases, index=_default_idx, label_visibility="collapsed")
     case_path = workspace.data_dir() / case_name
 
     # Switching Case leaves inputs_selected pointing at the previous case's file
@@ -54,8 +55,6 @@ with st.sidebar:
                 break
         else:
             st.session_state.inputs_selected = None
-
-    st.divider()
 
     # Inject CSS: make the sidebar file buttons read as a compact, flat tree.
     # Streamlit's default button paints a filled "secondary" background and a
@@ -107,11 +106,13 @@ with st.sidebar:
         (case_path / "resources" / f).exists() for f in fleet_view.RESOURCE_FILES
     )
     if _has_resource_files:
+        st.subheader("Graph")
         _all_active = st.session_state.inputs_selected == ALL_RESOURCES
         if st.button(f"{'▶' if _all_active else '▷'} ★ All Resources Graph", key="tree_all_resources"):
             st.session_state.inputs_selected = ALL_RESOURCES
             st.rerun()
 
+    st.subheader("Files")
     for dir_name in TREE_DIRS:
         dir_path = case_path / dir_name
         if not dir_path.exists():

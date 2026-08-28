@@ -9,6 +9,7 @@ from src import help_docs, ui
 
 st.set_page_config(page_title="GenX – Help", layout="wide")
 ui.compact_layout()
+ui.sidebar_brand()
 
 st.title("Help & GenX.jl Reference")
 st.caption(
@@ -20,7 +21,6 @@ _topics = help_docs.topics()
 _slug_to_title = {t.slug: t.title for t in _topics}
 
 with st.sidebar:
-    st.title("GenX Help")
     st.link_button("📖 Full GenX.jl docs", help_docs.hosted_docs_url(), width="stretch")
     if any(not t.available for t in _topics):
         st.caption("⚠ Some reference sections could not be loaded.")

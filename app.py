@@ -11,6 +11,7 @@ from src import examples, run_diagnosis, run_preview, run_settings, ui, workspac
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 ui.compact_layout()
+ui.sidebar_brand()
 
 # ── Workspace setup gate ────────────────────────────────────────────────────
 # The workspace root is unset by default on first run. If unset, show a setup

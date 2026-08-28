@@ -13,6 +13,7 @@ from src.resource_style import COLORS, resource_color  # noqa: F401  (COLORS use
 
 st.set_page_config(page_title="GenX – Results", layout="wide")
 ui.compact_layout()
+ui.sidebar_brand()
 
 if workspace.get_workspace_root() is None:
     st.title("Results")
@@ -26,7 +27,7 @@ _archives = archive_lib.list_archives()
 _pending_archive = st.session_state.pop("archive_to_view", None)
 
 with st.sidebar:
-    st.title("GenX Results")
+    st.subheader("Source")
 
     source_options = ["Live case", "Archived run"]
     default_source = "Archived run" if _pending_archive else "Live case"
