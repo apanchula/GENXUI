@@ -1,7 +1,7 @@
 # Proposal: Graphical Fleet View for the Resources Tab
 
-**Status:** proposed, not implemented
-**Location:** `pages/2_Inputs.py`, when `folder in ("resources", "policies")`
+**Status:** core implemented 2026-08-28 (see "Implementation status" below)
+**Location:** `pages/2_Inputs.py`, resource files only (`folder == "resources"`)
 
 ## Problem
 
@@ -98,3 +98,31 @@ Scope for a first pass: treemap + metric row only, or the full set (treemap + bu
 diagram + cards + scatter)? The bus diagram is likely the more novel/useful piece
 since nothing else in the app currently shows zone-level connectivity — worth
 prioritizing over the card grid/scatter if scope needs to be cut.
+
+---
+
+## Implementation status — done 2026-08-28
+
+Scope decisions (from the user): **core set** (metrics + treemap + bus diagram),
+**cross-file "All resources" rollup included**, **resource files only** (policy
+files stay table-only), **sizing-metric selector with graceful fallback**.
+
+- `src/resource_style.py` (new): `COLORS` + `resource_color()` extracted from
+  `pages/3_Results.py` so Inputs and Results share one scheme. `3_Results.py`
+  now imports from it (only change to that file).
+- `src/fleet_view.py` (new): `load_fleet()`, `fleet_metrics()`, `size_series()`
+  (uniform fallback + caption when the metric is all-zero/all-sentinel),
+  `fleet_frame()`, `read_network_lines()` (list **and** matrix interfaces),
+  `bus_layout()` (single-zone → central hub; multi-zone → hub ring + tie-lines).
+- `pages/2_Inputs.py`:
+  - "★ All resources" entry at the top of the sidebar tree → combined Overview.
+  - `Table | Overview` `st.segmented_control` on each resource file (default
+    Table; the editor and its save path are unchanged).
+  - Overview = sizing radio + 4-metric row + by-type caption + `px.treemap`
+    (`fleet > Zone > Type > Resource`) + hub-and-spoke `go.Figure` bus diagram.
+- `tests/test_fleet_view.py`: 16 cases (parsing, sentinel handling, greenfield
+  vs fixed-fleet metrics, both network interfaces, single/multi-zone layout).
+  All pass; `streamlit` AppTest clean on all four pages.
+
+**Not done** (deferred per the scope decision): card grid, screening-curve
+scatter, sorted capacity bar, and any policy-file Overview.

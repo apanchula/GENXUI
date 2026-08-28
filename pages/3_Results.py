@@ -9,6 +9,7 @@ from pathlib import Path
 import archive_lib
 import report_lib
 from src import workspace
+from src.resource_style import COLORS, resource_color  # noqa: F401  (COLORS used below)
 
 st.set_page_config(page_title="GenX – Results", layout="wide")
 
@@ -545,34 +546,6 @@ cap_fig = None
 pie_fig = None
 
 col_cap, col_pb = st.columns(2)
-
-COLORS = {
-    "thermal":  "#4682b4",
-    "solar":    "#ff8c00",
-    "wind":     "#27ae60",
-    "storage":  "#2ecc71",
-    "lds":      "#9b59b6",
-    "grid":     "#f1c40f",
-    "other":    "#888888",
-}
-
-
-def resource_color(name: str) -> str:
-    n = name.lower()
-    if any(k in n for k in ("gas", "ngcc", "natural_gas", "coal", "nuclear", "thermal")):
-        return COLORS["thermal"]
-    if any(k in n for k in ("pv", "solar")):
-        return COLORS["solar"]
-    if "wind" in n:
-        return COLORS["wind"]
-    if "lds" in n:
-        return COLORS["lds"]
-    if any(k in n for k in ("battery", "stor", "storage")):
-        return COLORS["storage"]
-    if "grid" in n:
-        return COLORS["grid"]
-    return COLORS["other"]
-
 
 with col_cap:
     st.subheader("Capacity Built")

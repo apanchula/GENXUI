@@ -1,10 +1,14 @@
+import math
+
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 import yaml
 from pathlib import Path
 
 import archive_lib
-from src import help_docs, workspace
+from src import fleet_view, help_docs, workspace
 
 st.set_page_config(page_title="GenX – Inputs", layout="wide")
 
@@ -14,6 +18,7 @@ if workspace.get_workspace_root() is None:
     st.stop()
 
 TREE_DIRS = ["resources", "system", "policies", "settings"]
+ALL_RESOURCES = "::all_resources"   # sentinel for the cross-file resources view
 
 # ── Session state ─────────────────────────────────────────────────────────────
 if "inputs_selected" not in st.session_state:
@@ -39,7 +44,7 @@ with st.sidebar:
     # Carry the selection over to the same file in the new case if it exists,
     # otherwise drop it so the user gets the "pick a file" prompt.
     _sel = st.session_state.inputs_selected
-    if _sel and not Path(_sel).is_relative_to(case_path):
+    if _sel and _sel != ALL_RESOURCES and not Path(_sel).is_relative_to(case_path):
         for _root in (workspace.data_dir() / c for c in cases):
             if Path(_sel).is_relative_to(_root):
                 _rel = Path(_sel).relative_to(_root)
@@ -96,6 +101,15 @@ with st.sidebar:
     section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] { padding-top: 0.25rem; }
     </style>
     """, unsafe_allow_html=True)
+
+    _has_resource_files = any(
+        (case_path / "resources" / f).exists() for f in fleet_view.RESOURCE_FILES
+    )
+    if _has_resource_files:
+        _all_active = st.session_state.inputs_selected == ALL_RESOURCES
+        if st.button(f"{'▶' if _all_active else '▷'} ★ All resources", key="tree_all_resources"):
+            st.session_state.inputs_selected = ALL_RESOURCES
+            st.rerun()
 
     for dir_name in TREE_DIRS:
         dir_path = case_path / dir_name
@@ -168,12 +182,122 @@ def render_column_help(file_stem: str, columns) -> None:
         st.caption("Source: GenX.jl docs · see the **Help** page for the full reference.")
 
 
+# ── Fleet view (resource Overview) — see docs/proposal_resource_fleet_view.md ──
+def _type_color_map(resources) -> dict[str, str]:
+    m: dict[str, str] = {}
+    for r in resources:
+        m.setdefault(r.type, r.color)
+    return m
+
+
+def _bus_figure(layout: dict, uniform: bool) -> go.Figure:
+    fig = go.Figure()
+    # tie lines between zone hubs
+    for x0, y0, x1, y1 in layout["ties"]:
+        fig.add_trace(go.Scatter(
+            x=[x0, x1], y=[y0, y1], mode="lines",
+            line=dict(color="rgba(128,128,128,0.55)", width=4),
+            hoverinfo="skip", showlegend=False,
+        ))
+    # resource -> hub spokes
+    for x0, y0, x1, y1 in layout["spokes"]:
+        fig.add_trace(go.Scatter(
+            x=[x0, x1], y=[y0, y1], mode="lines",
+            line=dict(color="rgba(128,128,128,0.30)", width=1),
+            hoverinfo="skip", showlegend=False,
+        ))
+    # hub nodes
+    if layout["hubs"]:
+        fig.add_trace(go.Scatter(
+            x=[h["x"] for h in layout["hubs"]],
+            y=[h["y"] for h in layout["hubs"]],
+            mode="markers+text",
+            marker=dict(symbol="square", size=22, color="rgba(128,128,128,0.85)"),
+            text=[h["label"] for h in layout["hubs"]],
+            textposition="bottom center", textfont=dict(size=11),
+            hovertemplate="bus %{text}<extra></extra>", showlegend=False,
+        ))
+    # resource nodes
+    nodes = layout["nodes"]
+    if nodes:
+        if uniform:
+            marker_size = [16] * len(nodes)
+        else:
+            mx = max((n["size"] for n in nodes), default=1.0) or 1.0
+            marker_size = [12 + 26 * math.sqrt(max(0.0, n["size"]) / mx) for n in nodes]
+        fig.add_trace(go.Scatter(
+            x=[n["x"] for n in nodes], y=[n["y"] for n in nodes],
+            mode="markers",
+            marker=dict(size=marker_size, color=[n["color"] for n in nodes],
+                        line=dict(width=1, color="white")),
+            text=[n["name"] for n in nodes],
+            customdata=[[n["type"], n["zone"]] for n in nodes],
+            hovertemplate="<b>%{text}</b><br>%{customdata[0]} · zone %{customdata[1]}<extra></extra>",
+            showlegend=False,
+        ))
+    fig.update_layout(
+        height=420, margin=dict(t=10, l=0, r=0, b=0),
+        xaxis=dict(visible=False), yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+def render_fleet_overview(resources, case_path: Path, key: str) -> None:
+    if not resources:
+        st.info("No resources to visualize in this case.")
+        return
+
+    m = fleet_view.fleet_metrics(resources)
+    metric_label = st.radio("Size by", list(fleet_view.SIZE_METRICS),
+                            horizontal=True, key=f"fv_size_{key}")
+    sizes, uniform, note = fleet_view.size_series(resources, fleet_view.SIZE_METRICS[metric_label])
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Resources", m["count"])
+    c2.metric("Zones", m["n_zones"])
+    c3.metric("Built capacity", f"{m['existing_total_mw']:,.0f} MW")
+    c4.metric("New-build candidates", m["candidate_count"])
+    st.caption(" · ".join(f"{t}: {n}" for t, n in m["by_type"].items()))
+    if note:
+        st.caption(f"⚠ {note}")
+
+    frame = fleet_view.fleet_frame(resources, sizes)
+    tree = px.treemap(
+        frame, path=[px.Constant("fleet"), "Zone", "Type", "Resource"], values="Size",
+        color="Type", color_discrete_map=_type_color_map(resources),
+        custom_data=["Existing_MW", "Max_MW", "New_Build"],
+    )
+    tree.update_traces(
+        root_color="rgba(0,0,0,0)",
+        hovertemplate="<b>%{label}</b><br>existing %{customdata[0]:,.0f} MW · "
+                      "max %{customdata[1]} · new build %{customdata[2]}<extra></extra>",
+    )
+    tree.update_layout(height=340, margin=dict(t=10, l=0, r=0, b=0))
+    st.markdown("**Composition**")
+    st.plotly_chart(tree, width="stretch", key=f"fv_tree_{key}")
+
+    st.markdown("**Zone / bus topology**")
+    ties = fleet_view.read_network_lines(case_path)
+    st.plotly_chart(_bus_figure(fleet_view.bus_layout(resources, sizes, ties), uniform),
+                    width="stretch", key=f"fv_bus_{key}")
+    if not ties and m["n_zones"] > 1:
+        st.caption("No `system/Network.csv` — zone hubs shown without tie-lines.")
+
+
 # ── Main content ──────────────────────────────────────────────────────────────
 selected = st.session_state.inputs_selected
 
 if not selected:
     st.title("Inputs")
     st.info("Select a file from the directory tree on the left.")
+    st.stop()
+
+if selected == ALL_RESOURCES:
+    st.title("All resources")
+    st.caption(f"`{case_name}` · every resource file combined")
+    st.divider()
+    render_fleet_overview(fleet_view.load_fleet(case_path), case_path, key="all")
     st.stop()
 
 sel_path = Path(selected)
@@ -224,19 +348,32 @@ if df is None:
 render_column_help(sel_path.stem, df.columns)
 
 
-# ── Resources: small editable table ──────────────────────────────────────────
-if folder in ("resources", "policies"):
-    if df.empty:
+# ── Resources: editable table + graphical Overview ──────────────────────────
+def _resource_editor(frame: pd.DataFrame) -> None:
+    if frame.empty:
         st.info("No data rows — file contains only a header.")
         st.code(sel_path.read_text().splitlines()[0])
-    else:
-        edited = st.data_editor(
-            df,
-            num_rows="dynamic",
-            width="stretch",
-            key=f"editor_{sel_path.name}",
+        return
+    edited = st.data_editor(
+        frame, num_rows="dynamic", width="stretch", key=f"editor_{sel_path.name}",
+    )
+    save_df(edited, sel_path, key=f"save_{sel_path.name}")
+
+
+if folder == "resources" and sel_path.name in fleet_view.RESOURCE_FILES:
+    _view = st.segmented_control(
+        "view", ["Table", "Overview"], default="Table",
+        label_visibility="collapsed", key=f"view_{sel_path.name}",
+    )
+    if _view == "Overview":
+        render_fleet_overview(
+            fleet_view.load_fleet(case_path, [sel_path.name]), case_path, key=sel_path.stem,
         )
-        save_df(edited, sel_path, key=f"save_{sel_path.name}")
+    else:
+        _resource_editor(df)
+
+elif folder in ("resources", "policies"):
+    _resource_editor(df)
 
 # ── System / Demand_data: editable NSE segments + demand chart ────────────────
 elif sel_path.name == "Demand_data.csv":
