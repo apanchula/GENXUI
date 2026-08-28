@@ -306,8 +306,21 @@ with col_controls:
 
     st.divider()
 
+    st.markdown("""
+    <style>
+    .st-key-run_genx button {
+        background-color: #16a34a !important;
+        border-color: #16a34a !important;
+    }
+    .st-key-run_genx button:hover:not(:disabled) {
+        background-color: #15803d !important;
+        border-color: #15803d !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     run_btn = st.button(
         "▶  Run GenX",
+        key="run_genx",
         disabled=st.session_state.running,
         type="primary",
         width="stretch",
