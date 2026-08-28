@@ -275,15 +275,35 @@ def bus_layout(resources: list[FleetResource], sizes: list[float] | None = None,
         region = _common_region(resources, z)
         hubs.append({"zone": z, "label": region or f"Zone {z}", "x": x, "y": y})
 
+    # Resources and the load share one evenly-spaced ring around each hub, so
+    # the load stub never lands on top of (or behind) a resource spoke. Slot 0
+    # is reserved for the load (pointing radially outward from the grid centre,
+    # or straight down for a lone hub); resources take the remaining slots.
     spoke_r = 1.3
-    nodes, spokes = [], []
+    load_r = 2.0
+    nodes, spokes, loads, load_edges = [], [], [], []
     by_zone: dict[int, list[int]] = {}
     for idx, r in enumerate(resources):
         by_zone.setdefault(r.zone, []).append(idx)
-    for z, idxs in by_zone.items():
+
+    for z in zones:
         hx, hy = hub_xy[z]
+        idxs = by_zone.get(z, [])
+        has_load = z in demand
+        total = len(idxs) + (1 if has_load else 0)
+        if total == 0:
+            continue
+        base = -math.pi / 2 if len(zones) == 1 else math.atan2(hy, hx)
+
+        slot = 0
+        if has_load:
+            lx, ly = hx + load_r * math.cos(base), hy + load_r * math.sin(base)
+            loads.append({"zone": z, "x": lx, "y": ly, "mw": demand[z]})
+            load_edges.append((hx, hy, lx, ly))
+            slot = 1
+
         for k, idx in enumerate(idxs):
-            ang = 2 * math.pi * k / max(1, len(idxs)) - math.pi / 2
+            ang = base + 2 * math.pi * (slot + k) / total
             nx, ny = hx + spoke_r * math.cos(ang), hy + spoke_r * math.sin(ang)
             r = resources[idx]
             nodes.append({
@@ -291,22 +311,6 @@ def bus_layout(resources: list[FleetResource], sizes: list[float] | None = None,
                 "x": nx, "y": ny, "color": r.color, "size": max(0.0, sizes[idx]),
             })
             spokes.append((nx, ny, hx, hy))
-
-    # load node per zone — offset radially outward (down, for a single hub)
-    load_r = 1.9
-    loads, load_edges = [], []
-    for z, mw in demand.items():
-        if z not in hub_xy:
-            continue
-        hx, hy = hub_xy[z]
-        if len(zones) == 1:
-            ux, uy = 0.0, -1.0
-        else:
-            d = math.hypot(hx, hy) or 1.0
-            ux, uy = hx / d, hy / d
-        lx, ly = hx + load_r * ux, hy + load_r * uy
-        loads.append({"zone": z, "x": lx, "y": ly, "mw": mw})
-        load_edges.append((hx, hy, lx, ly))
 
     ties = []
     for a, b in (tie_lines or []):
