@@ -51,22 +51,31 @@ with st.sidebar:
 
     st.divider()
 
-    # Inject CSS: make sidebar buttons look like tree items
+    # Inject CSS: make sidebar buttons look like compact tree items
     st.markdown("""
     <style>
     section[data-testid="stSidebar"] div.stButton > button {
         text-align: left;
         background: transparent;
         border: none;
-        padding: 2px 6px;
-        font-size: 0.85rem;
+        padding: 0 6px;
+        min-height: 0;
+        height: 1.55rem;
+        line-height: 1.55rem;
+        font-size: 0.82rem;
         width: 100%;
         color: inherit;
     }
+    section[data-testid="stSidebar"] div.stButton > button p { line-height: 1.55rem; }
     section[data-testid="stSidebar"] div.stButton > button:hover {
-        background: rgba(255,255,255,0.08);
+        background: rgba(128,128,128,0.18);
         border: none;
     }
+    /* tighten the vertical gap between consecutive tree rows */
+    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stVerticalBlock"] {
+        gap: 0.1rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] { padding-top: 0.25rem; }
     </style>
     """, unsafe_allow_html=True)
 
