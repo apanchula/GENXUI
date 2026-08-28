@@ -3,13 +3,19 @@ import streamlit as st
 from pathlib import Path
 
 import archive_lib
+from src import workspace
 
 st.set_page_config(page_title="GenX – Archives", layout="wide")
 
-GENX_ROOT = Path(__file__).parent.parent.parent / "GenX.jl"
+if workspace.get_workspace_root() is None:
+    st.title("Archives")
+    st.info("No workspace configured yet. Set one up from the **Runner** page first.")
+    st.stop()
+
+GENX_ROOT = workspace.legacy_genx_root()  # GenX.jl solver checkout, used only for git-commit tracking
 
 st.title("Archives")
-st.caption(f"`{archive_lib.short_path(archive_lib.ARCHIVE_ROOT, GENX_ROOT.parent)}`")
+st.caption(f"`{workspace.archive_dir()}`")
 
 archives = archive_lib.list_archives()
 
@@ -92,7 +98,7 @@ with col_actions:
 
     if st.button("🔁 Recreate as new case", width="stretch"):
         try:
-            new_case_dir = archive_lib.restore_archive_to_new_case(archive_dir, GENX_ROOT)
+            new_case_dir = archive_lib.restore_archive_to_new_case(archive_dir)
             st.session_state["_restored_case"] = new_case_dir.name
             st.success(f"Restored inputs to `{new_case_dir.name}`")
         except archive_lib.ArchiveError as e:

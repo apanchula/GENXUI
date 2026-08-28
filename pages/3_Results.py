@@ -8,10 +8,16 @@ from pathlib import Path
 
 import archive_lib
 import report_lib
+from src import workspace
 
 st.set_page_config(page_title="GenX – Results", layout="wide")
 
-GENX_ROOT = Path(__file__).parent.parent.parent / "GenX.jl"
+if workspace.get_workspace_root() is None:
+    st.title("Results")
+    st.info("No workspace configured yet. Set one up from the **Runner** page first.")
+    st.stop()
+
+GENX_ROOT = workspace.legacy_genx_root()  # GenX.jl solver checkout, used only for git-commit tracking
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 _archives = archive_lib.list_archives()
@@ -50,14 +56,14 @@ with st.sidebar:
         results_dir = Path(archive_manifest["path"]) / "results"
         inputs_dir = Path(archive_manifest["path"]) / "inputs"
     else:
-        cases = sorted([
-            d.name for d in GENX_ROOT.iterdir()
-            if d.is_dir() and (d / "Run.jl").exists()
-        ])
+        cases = workspace.discover_cases()
+        if not cases:
+            st.info(f"No cases in `{workspace.data_dir()}`. Import one from the **Runner** page.")
+            st.stop()
         _default_case = st.session_state.get("selected_case")
         _default_idx = cases.index(_default_case) if _default_case in cases else 0
         case_name = st.selectbox("Case", cases, index=_default_idx)
-        case_path = GENX_ROOT / case_name
+        case_path = workspace.data_dir() / case_name
         results_dir = case_path / "results"
         inputs_dir = case_path
 
@@ -256,10 +262,10 @@ if is_archived and archive_manifest is not None:
     st.caption(
         f"Archived run — {archive_manifest.get('label') or 'unlabeled'} — "
         f"{archive_manifest['archived_at'][:19]} — "
-        f"`{archive_lib.short_path(results_dir, archive_lib.ARCHIVE_ROOT)}`"
+        f"`{archive_lib.short_path(results_dir, workspace.archive_dir())}`"
     )
 else:
-    st.caption(f"Live case — `{archive_lib.short_path(results_dir, GENX_ROOT)}`")
+    st.caption(f"Live case — `{archive_lib.short_path(results_dir, workspace.data_dir())}`")
 
 # ── Section 1: Key Metrics ────────────────────────────────────────────────────
 st.subheader("Key Metrics")

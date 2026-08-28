@@ -4,11 +4,16 @@ import yaml
 from pathlib import Path
 
 import archive_lib
+from src import workspace
 
 st.set_page_config(page_title="GenX – Inputs", layout="wide")
 
-GENX_ROOT = Path(__file__).parent.parent.parent / "GenX.jl"
-TREE_DIRS  = ["resources", "system", "policies", "settings"]
+if workspace.get_workspace_root() is None:
+    st.title("Inputs")
+    st.info("No workspace configured yet. Set one up from the **Runner** page first.")
+    st.stop()
+
+TREE_DIRS = ["resources", "system", "policies", "settings"]
 
 # ── Session state ─────────────────────────────────────────────────────────────
 if "inputs_selected" not in st.session_state:
@@ -19,14 +24,15 @@ if "inputs_selected" not in st.session_state:
 with st.sidebar:
     st.title("GenX Inputs")
 
-    cases = sorted([
-        d.name for d in GENX_ROOT.iterdir()
-        if d.is_dir() and (d / "Run.jl").exists()
-    ])
+    cases = workspace.discover_cases()
+    if not cases:
+        st.info(f"No cases in `{workspace.data_dir()}`. Import one from the **Runner** page.")
+        st.stop()
+
     _default_case = st.session_state.get("selected_case")
     _default_idx = cases.index(_default_case) if _default_case in cases else 0
     case_name = st.selectbox("Case", cases, index=_default_idx)
-    case_path = GENX_ROOT / case_name
+    case_path = workspace.data_dir() / case_name
 
     st.divider()
 
@@ -111,7 +117,7 @@ if not sel_path.exists():
 col_title, col_reload = st.columns([5, 1])
 with col_title:
     st.title(sel_path.name)
-    st.caption(f"`{archive_lib.short_path(sel_path, GENX_ROOT)}`")
+    st.caption(f"`{archive_lib.short_path(sel_path, workspace.data_dir())}`")
 with col_reload:
     st.write("")
     if st.button("🔄 Reload", help="Discard unsaved edits and reload from disk"):

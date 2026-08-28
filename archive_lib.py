@@ -2,8 +2,9 @@
 
 An "archive" is a self-contained snapshot of one case's results/ output plus the
 inputs (Run.jl, resources/, system/, policies/, settings/) that produced it, stored
-under ARCHIVE_ROOT (a sibling of GenXUI/, outside both the GenX.jl and GenXUI git
-repos) so it survives the case folder being edited, re-run, or deleted.
+under the user-configured workspace's archive directory (see `src/workspace.py`,
+`workspace.archive_dir()`) so it survives the case folder being edited, re-run,
+or deleted.
 """
 import io
 import json
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ARCHIVE_ROOT = Path(__file__).resolve().parent.parent / "archives"
+from src import workspace
 
 INPUT_DIRS = ["resources", "system", "policies", "settings"]
 
@@ -155,6 +156,7 @@ def compute_headline_metrics(results_dir: Path) -> dict:
 
 
 def create_archive(case_path: Path, genx_root: Path, *, label: str | None = None) -> Path:
+    archive_root = workspace.archive_dir()
     results_src = case_path / "results"
     if not results_src.exists() or not any(results_src.iterdir()):
         raise ArchiveError(f"No results found for `{case_path.name}` — run the model first.")
@@ -165,7 +167,7 @@ def create_archive(case_path: Path, genx_root: Path, *, label: str | None = None
     if clean_label:
         stem = f"{stem}__{clean_label}"
 
-    tmp_dir = ARCHIVE_ROOT / f".tmp_{stem}"
+    tmp_dir = archive_root / f".tmp_{stem}"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
 
@@ -199,7 +201,7 @@ def create_archive(case_path: Path, genx_root: Path, *, label: str | None = None
         }
         (tmp_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
-        final_dir = ARCHIVE_ROOT / stem
+        final_dir = archive_root / stem
         suffix = 2
         while True:
             try:
@@ -207,7 +209,7 @@ def create_archive(case_path: Path, genx_root: Path, *, label: str | None = None
                 return final_dir
             except (FileExistsError, OSError):
                 if final_dir.exists():
-                    final_dir = ARCHIVE_ROOT / f"{stem}-{suffix}"
+                    final_dir = archive_root / f"{stem}-{suffix}"
                     suffix += 1
                     continue
                 raise
@@ -225,10 +227,11 @@ def read_manifest(archive_dir: Path) -> dict:
 
 
 def list_archives() -> list[dict]:
-    if not ARCHIVE_ROOT.exists():
+    archive_root = workspace.archive_dir()
+    if not archive_root.exists():
         return []
     archives = []
-    for d in ARCHIVE_ROOT.iterdir():
+    for d in archive_root.iterdir():
         if not d.is_dir() or d.name.startswith(".tmp_"):
             continue
         try:
@@ -267,7 +270,9 @@ def check_commit_mismatch(manifest: dict, genx_root: Path) -> str | None:
     return None
 
 
-def restore_archive_to_new_case(archive_dir: Path, genx_root: Path) -> Path:
+def restore_archive_to_new_case(archive_dir: Path) -> Path:
+    """Restore a saved archive's inputs as a new case in the active workspace's
+    data_dir() (not the legacy GenX.jl tree — see GENXUI-1)."""
     manifest = read_manifest(archive_dir)
     inputs_dir = archive_dir / "inputs"
     if not inputs_dir.exists():
@@ -276,7 +281,7 @@ def restore_archive_to_new_case(archive_dir: Path, genx_root: Path) -> Path:
     case_name = manifest.get("case_name", "case")
     local_ts = datetime.now()
     new_name = f"{case_name}_replay_{local_ts:%Y%m%d-%H%M%S}"
-    new_case_dir = _unique_dir(genx_root, new_name)
+    new_case_dir = _unique_dir(workspace.data_dir(), new_name)
 
     try:
         for dir_name in INPUT_DIRS:

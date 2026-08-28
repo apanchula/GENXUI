@@ -7,15 +7,50 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
+from src import workspace
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 
-GENX_ROOT = Path(__file__).parent.parent / "GenX.jl"
+# ── Workspace setup gate ────────────────────────────────────────────────────
+# The workspace root is unset by default on first run. If unset, show a setup
+# prompt requiring the user to choose a directory before any case list loads —
+# the app must not crash and must not silently fall back to scanning
+# `../GenX.jl` (GENXUI-1).
 
-CASES = sorted([
-    d.name for d in GENX_ROOT.iterdir()
-    if d.is_dir() and (d / "Run.jl").exists()
-])
+
+def _render_workspace_setup(*, changing: bool = False):
+    st.title("GenX UI")
+    if changing:
+        st.subheader("Change workspace")
+    else:
+        st.subheader("Set up your workspace")
+        st.info(
+            "GenXUI needs one workspace folder to work from. It will contain a "
+            "`data/` directory for active cases and an `archive/` directory for "
+            "saved runs."
+        )
+
+    default = str(workspace.get_workspace_root() or Path.home() / "genxui-workspace")
+    root_input = st.text_input("Workspace folder", value=default, key="workspace_root_input")
+
+    if st.button("✅ Use this folder", type="primary"):
+        try:
+            workspace.set_workspace_root(Path(root_input))
+            st.session_state.pop("_ws_cases_cache", None)
+            st.toast(f"Workspace set to `{root_input}`", icon="✅")
+            st.rerun()
+        except OSError as e:
+            st.error(f"Couldn't set up that folder: {e}")
+
+
+_workspace_root = workspace.get_workspace_root()
+if _workspace_root is None:
+    _render_workspace_setup()
+    st.stop()
+
+GENX_ROOT = workspace.legacy_genx_root()  # GenX.jl solver checkout, used only for git-commit tracking on archive
+
+CASES = workspace.discover_cases()
 
 # ── Session state defaults ────────────────────────────────────────────────────
 for key, default in {
@@ -121,8 +156,52 @@ def load_system_summary(case_path: Path) -> pd.DataFrame | None:
     return df if not df.empty else None
 
 
+# ── Sidebar: workspace controller ───────────────────────────────────────────
+with st.sidebar:
+    st.subheader("Workspace")
+    st.caption(f"`{workspace.get_workspace_root()}`")
+
+    if workspace.has_unmigrated_legacy_archives() and not st.session_state.get("_legacy_notice_dismissed"):
+        with st.container(border=True):
+            st.caption(
+                "ℹ️ Archived runs were found at the old default location "
+                f"(`{workspace.legacy_archive_root()}`), outside your current workspace. "
+                "They're not lost, just not shown here — set your workspace to that "
+                "folder to see them, or leave them where they are."
+            )
+            if st.button("Dismiss", key="_dismiss_legacy_notice"):
+                st.session_state["_legacy_notice_dismissed"] = True
+                st.rerun()
+
+    with st.expander("⚙️ Change workspace"):
+        _render_workspace_setup(changing=True)
+
+    with st.expander("📥 Import case from GenX.jl checkout"):
+        _legacy_cases = workspace.list_legacy_cases()
+        if not _legacy_cases:
+            st.caption(f"No cases found under `{workspace.legacy_genx_root()}`.")
+        else:
+            _import_choice = st.selectbox("Case", _legacy_cases, key="_import_case_select")
+            if st.button("Import into active workspace", key="_import_case_btn"):
+                try:
+                    dest = workspace.import_case_from_legacy(_import_choice)
+                    st.success(f"Imported to `{dest.name}`")
+                    st.rerun()
+                except (FileNotFoundError, FileExistsError, OSError) as e:
+                    st.error(str(e))
+
+    st.divider()
+
+
 # ── Layout ────────────────────────────────────────────────────────────────────
 st.title("GenX Runner")
+
+if not CASES:
+    st.info(
+        f"No cases found in your active workspace (`{workspace.data_dir()}`). "
+        "Use **Import case from GenX.jl** in the sidebar to bring one in."
+    )
+    st.stop()
 
 col_controls, col_terminal = st.columns([1, 2])
 
@@ -138,9 +217,9 @@ with col_controls:
         st.session_state["app_case_select"] = _preselect_case
 
     case_name = st.selectbox("Select case", CASES, key="app_case_select")
-    case_path = GENX_ROOT / case_name
+    case_path = workspace.data_dir() / case_name
 
-    st.caption(f"`{archive_lib.short_path(case_path, GENX_ROOT)}`")
+    st.caption(f"`{archive_lib.short_path(case_path, workspace.data_dir())}`")
 
     if st.button("📌 Set as default case", width="stretch"):
         st.session_state["selected_case"] = case_name
