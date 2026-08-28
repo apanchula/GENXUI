@@ -4,7 +4,7 @@ import yaml
 from pathlib import Path
 
 import archive_lib
-from src import workspace
+from src import help_docs, workspace
 
 st.set_page_config(page_title="GenX – Inputs", layout="wide")
 
@@ -99,6 +99,30 @@ def save_df(df: pd.DataFrame, path: Path, key: str):
         st.success(f"Saved `{path.name}`")
 
 
+# ── Inline GenX reference (GENXUI-3) ─────────────────────────────────────────
+def render_settings_help(keys) -> None:
+    """A collapsed reference block for the genx_settings.yml keys in this file."""
+    entries = [(k, help_docs.settings_help(str(k))) for k in keys]
+    entries = [(k, h) for k, h in entries if h]
+    if not entries:
+        return
+    with st.expander("ℹ️ Settings reference", expanded=False):
+        for k, h in entries:
+            st.markdown(f"**`{k}`** — {h.as_markdown()}")
+        st.caption("Source: GenX.jl docs · see the **Help** page for the full reference.")
+
+
+def render_column_help(file_stem: str, columns) -> None:
+    """A collapsed reference block for the documented columns present in this CSV."""
+    docs = help_docs.documented_columns(file_stem, [str(c) for c in columns])
+    if not docs:
+        return
+    with st.expander("ℹ️ Column reference", expanded=False):
+        for col, desc in docs:
+            st.markdown(f"**`{col}`** — {desc}")
+        st.caption("Source: GenX.jl docs · see the **Help** page for the full reference.")
+
+
 # ── Main content ──────────────────────────────────────────────────────────────
 selected = st.session_state.inputs_selected
 
@@ -145,11 +169,14 @@ if sel_path.suffix == ".yml":
         sel_path.write_text(yaml.dump(updated, default_flow_style=False, sort_keys=False))
         st.cache_data.clear()
         st.success(f"Saved `{sel_path.name}`")
+    render_settings_help(raw.keys())
     st.stop()
 
 df = load_csv(sel_path)
 if df is None:
     st.stop()
+
+render_column_help(sel_path.stem, df.columns)
 
 
 # ── Resources: small editable table ──────────────────────────────────────────

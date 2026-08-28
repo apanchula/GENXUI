@@ -1,0 +1,282 @@
+# GenX Outputs
+
+The table below summarizes the units of each output variable reported as part of the various CSV files produced after each model run. The reported units are also provided. If a result file includes time-dependent values, the value will not include the hour weight in it. An annual sum ("AnnualSum") column/row will be provided whenever it is possible (e.g., `emissions.csv`).
+
+## 1 Default output files
+
+### 1.1 capacity.csv
+
+Reports optimal values of investment variables (except StartCap, which is an input)
+
+###### Table 15: Structure of the capacity.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+| StartCap |Initial power capacity of each resource type in each zone; this is an input |MW |
+| RetCap |Retired power capacity of each resource type in each zone |MW |
+| NewCap |Installed capacity of each resource type in each zone |MW|
+| EndCap| Total power capacity of each resource type in each zone |MW |
+| StartEnergyCap |Initial energy capacity of each resource type in each zone; this is an input and applies only to storage tech.| MWh |
+| RetEnergyCap |Retired energy capacity of each resource type in each zone; applies only to storage tech. |MWh |
+| NewEnergyCap| Installed energy capacity of each resource type in each zone; applies only to storage tech. |MWh |
+| EndEnergyCap |Total installed energy capacity of each resource type in each zone; applies only to storage tech. |MWh |
+| StartChargeCap| Initial charging power capacity of `STOR = 2` resource type in each zone; this is an input |MW |
+| RetChargeCap |Retired charging power capacity of `STOR = 2` resource type in each zone |MW |
+| NewChargeCap |Installed charging capacity of each resource type in each zone |MW |
+| EndChargeCap |Total charging power capacity of each resource type in each zone |MW|
+
+!!! note "Note"
+    Capacity output for **Allam Cycle LOX** resources that is included in the **capacity.csv** file is for the **sCO2Turbine** in an Allam Cycle LOX resource.
+    For the full capacity output, please refer to the **capacity\_allam\_cycle\_lox.csv** file ([`GenX.write_allam_capacity`](@ref)).
+
+### 1.2 costs.csv
+
+Reports optimal objective function value and contribution of each term by zone.
+
+###### Table 16: Structure of the costs.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+| cTotal |Total objective function value |USD |
+| cFix |Total annualized investment and fixed operating & maintainenance (FOM) costs associated with all resources |USD |
+| cVar |Total annual variable cost associated with all resources; includes fuel costs for thermal plants |USD |
+| cNSE |Total annual cost of non-served energy |USD |
+| cStart |Total annual cost of start-up of thermal power plants| USD |
+| cUnmetRsv |Total annual cost of not meeting time-dependent operating reserve (spinning) requirements |USD |
+| cNetworkExp |Total cost of network expansion |USD |
+| cEmissionsRevenue |Total and zonal emissions revenue |USD |
+| cEmissionsCost |Total an zonal emissions cost |USD |
+
+### 1.3 emissions.csv
+
+Reports CO2 emissions by zone at each hour; an annual sum row will be provided. If any emission cap is present, emission prices each zone faced by each cap will be copied on top of this table with the following strucutre.
+
+###### Table 17: Structure of emission prices in the emissions.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+|CO_2\_price |Marginal CO2 abatement cost associated with constraint on maximum annual CO2 emissions; will be same across zones if CO2 emissions constraint is applied for the entire region and not zone-wise |USD/ tonne CO2. |
+
+### 1.4 nse.csv
+
+Reports non-served energy for every model zone, time step and cost-segment.
+
+### 1.5 power.csv
+
+Reports power discharged by each resource (generation, storage, demand response) in each model time step.
+
+### 1.6 reliability.csv
+
+Reports dual variable of maximum non-served energy constraint (shadow price of reliability constraint) for each model zone and time step.
+
+### 1.7 prices.csv
+
+Reports marginal electricity price for each model zone and time step. Marginal electricity price is equal to the dual variable of the load balance constraint. If GenX is configured as a mixed integer linear program, then this output is only generated if `WriteShadowPrices` flag is activated. If configured as a linear program (i.e. linearized unit commitment or economic dispatch) then output automatically available.
+
+### 1.8 status.csv
+
+Reports computational performance of the model and objective function related information.
+
+###### Table 18: Structure of the status.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+|Status | termination criteria (optimal, timelimit etc.).||
+|solve | Solve time including time for pre-solve |seconds |
+|Objval | Optimal objective function value |USD |
+|Objbound | Best objective lower bound | USD |
+|FinalMIPGap |Optimality gap at termination in case of a mixed-integer linear program (MIP gap); when using Gurobi, the lower bound and MIP gap is reported excluding constant terms (E.g. fixed cost of existing generators that cannot be retired) in the objective function and hence may not be directly usable. |Fraction|
+
+### 1.9 NetRevenue.csv
+
+This file summarizes the cost, revenue and profit for each generation technology for each region.
+
+###### Table 19: Stucture of the NetRevenue.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+| Fixed\_OM\_cost\_MW | Fixed Operation and Maintenance cost of the MW capacity. |USD |
+| Fixed\_OM\_cost\_MWh| Fixed Operation and Maintenance cost of the MWh capacity. Only applicable to energy storage.| USD |
+| Var\_OM\_cost\_out| Variable Operation and Maintenance cost of the power generation or discharge. |USD |
+| Var\_OM\_cost\_in |Variable Operation and Maintenance cost of the power charge/pumping. Only applicable to energy storage. |USD |
+| Fuel\_cost| Fuel cost of the power generation. Only applicable to generation that burns fuel. |USD |
+| Charge\_cost |Cost of charging power (due to the payment for electricity) Only applicable to energy storage. |USD |
+| EmissionsCost| Cost of buying emission credit. |USD |
+| StartCost |Cost of generator start-up. |USD |
+| Inv\_cost\_MW |Cost of building MW capacity. |USD |
+| Inv\_cost\_MWh| Cost of building MWh capacity. |USD |
+| EnergyRevenue |Revenue of generating power.| USD |
+| SubsidyRevenue| Revenue of Min\_Cap subsidy. |USD |
+| ReserveMarginRevenue| Revenue earned from capacity reserve margin constraints. |USD |
+| ESRRevenue| Revenue selling renewable/clean energy credits. |USD |
+| Revenue| Total Revenue.| USD |
+| Cost| Total Cost. |USD |
+| Profit |Revenue minus Cost. |USD |
+
+## 2 Settings-specific outputs
+
+This section includes the output files that GenX will print if corresponding function is specified in the Settings.
+
+### 2.1 CapacityValue.csv
+
+This file includes the time-dependent capacity value calculated for each generator. GenX will print this file only if the capacity reserve margin constraints are modeled through the setting file. Each row of the file (excluding the header) corresponds to a generator specified in the inputs. Each column starting from the t1 to the second last one stores the result of capacity obligation provided in each hour divided by the total capacity. Thus the number is unitless. If the capacity margin reserve is not binding for one hour, GenX will return zero. The last column specified the name of the corresponding capacity reserve constraint. Note that, if the user calculates the hour-weight-averaged capacity value for each generator using data of the binding hours, the result is what RTO/ISO call capacity credit.
+
+<!-- #### 2.2 ExportRevenue.csv
+
+This file includes the export revenue in USD of each zone. GenX will print this file only when a network is present and Locational Marginal Price (LMP) data is available to the GenX. The Total row includes the time-step-weighted summation of the time-dependent values shown below. For each time-step, the export revenue is calculated as the net outbound powerflow multiplied by the LMP. It is noteworthy that this export revenue is already part of the generation revenue, and the user should not double count.
+
+
+#### 2.3 Importcost.csv
+
+This file includes the import cost in USD of each zone. GenX will print this file only when a network is present and Locational Marginal Price (LMP) data is available to the GenX. The Total row includes the time-step -weighted summation of the time-dependent values shown below. For each time step, the import cost is calculated as the net inbound powerflow multiplied by the LMP. It is noteworthy that this import cost is already part of the load payment, and the user should not double count. -->
+
+### 2.2 EnergyRevenue.csv
+
+This file includes the energy revenue in USD earned by each generator through injecting into the grid. Only annual sum values are available.
+
+### 2.3 ChargingCost.csv
+
+This file includes the charging cost  in USD of earned by each generator through withdrawing from the grid. Only annual sum values are available.
+
+### 2.4 ReserveMargin.csv
+
+This file includes the shadow prices of the capacity reserve margin constraints. GenX will print this file only when capacity reserve margin is modeled and the shadow price can be obtained form the solver, as described earlier. Each row (except the header) corresponds to a capacity reserve margin constraint, and each column corresponds to an time step. As a reminder, GenX models the capacity reserve margin (aka capacity market) at the time-dependent level, and each constraint either stands for an overall market or a locality constraint.
+
+### 2.5 ReserveMarginRevenue.csv
+
+This file includes the capacity revenue earned by each generator listed in the input file. GenX will print this file only when capacity reserve margin is modeled and the shadow price can be obtained form the solver. Each row corresponds to a generator, and each column starting from the 6th to the second last is the total revenue from each capacity reserve margin constraint. The revenue is calculated as the capacity contribution of each time steps multiplied by the shadow price, and then the sum is taken over all modeled time steps. The last column is the total revenue received from all capacity reserve margin constraints. As a reminder, GenX models the capacity reserve margin (aka capacity market) at the time-dependent level, and each constraint either stands for an overall market or a locality constraint.
+
+### 2.6 ESR\_prices.csv
+
+This file includes the renewable/clean energy credit price of each modeled RPS/CES constraint. GenX will print this file only when RPS/CES is modeled and the shadow price can be obtained form the solver. The unit is USD/MWh.
+
+### 2.7 ESR\_Revenue.csv
+
+This file includes the renewable/clean credit revenue earned by each generator listed in the input file. GenX will print this file only when RPS/CES is modeled and the shadow price can be obtained form the solver. Each row corresponds to a generator, and each column starting from the 6th to the second last is the total revenue earned from each RPS constraint. The revenue is calculated as the total annual generation (if elgible for the corresponding constraint) multiplied by the RPS/CES price. The last column is the total revenue received from all constraint. The unit is USD.
+
+### 2.8 SubsidyRevenue.csv
+
+This file includes subsidy revenue earned if a generator specified Min\_Cap is provided in the input file. GenX will print this file only the shadow price can be obtained form the solver. Do not confuse this with the Minimum Capacity Carveout constraint, which is for a subset of generators, and a separate revenue term will be calculated in other files. The unit is USD.
+
+## 3. Resources-specific outputs
+
+This section includes the output files related to specific resource types.
+
+### 3.1 capacity\_allam\_cycle\_lox.csv
+
+This file includes the capacity output for Allam Cycle LOX resources ([`GenX.write_allam_capacity`](@ref)).
+
+###### Table 3.1: Structure of the capacity\_allam\_cycle\_lox.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+| Resource | Name of the Allam Cycle LOX resource | |
+| Zone | Zone of the Allam Cycle LOX resource | |
+| StartCap\_sCO2turbine\_MW\_gross | Initial power capacity of the sCO2Turbine in the Allam Cycle LOX resource | MW |
+| StartCap\_ASU\_MW\_gross | Initial power capacity of the ASU in the Allam Cycle LOX resource | MW |
+| StartCap\_LOX\_t | Initial power capacity of the LOX in the Allam Cycle LOX resource | t |
+| RetCap\_sCO2turbine\_MW\_gross | Retired power capacity of the sCO2Turbine in the Allam Cycle LOX resource | MW |
+| RetCap\_ASU\_MW\_gross | Retired power capacity of the ASU in the Allam Cycle LOX resource | MW |
+| RetCap\_LOX\_t | Retired power capacity of the LOX in the Allam Cycle LOX resource | t |
+| NewCap\_sCO2turbine\_MW\_gross | Installed power capacity of the sCO2Turbine in the Allam Cycle LOX resource | MW |
+| NewCap\_ASU\_MW\_gross | Installed power capacity of the ASU in the Allam Cycle LOX resource | MW |
+| NewCap\_LOX\_t | Installed power capacity of the LOX in the Allam Cycle LOX resource | t |
+| EndCap\_sCO2turbine\_MW\_gross | Total power capacity of the sCO2Turbine in the Allam Cycle LOX resource | MW |
+| EndCap\_ASU\_MW\_gross | Total power capacity of the ASU in the Allam Cycle LOX resource | MW |
+| EndCap\_LOX\_t | Total power capacity of the LOX in the Allam Cycle LOX resource | t |
+
+### 3.2 output\_allam\_cycle\_lox.csv
+
+This file includes the output from each component of an Allam Cycle LOX resource ([`GenX.write_allam_output`](@ref)).
+
+###### Table 3.2: Structure of the output\_allam\_cycle\_lox.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+| (resource\_name)\_sCO2Turbine\_gross\_power\_output\_mw | Hourly gross power output of the sCO2Turbine in the Allam Cycle LOX resource | MW |
+| (resource\_name)\_sco2turbine\_commit | Hourly unit commit status of the sCO2Turbine in the Allam Cycle LOX resource |  |
+| (resource\_name)\_ASU\_gross\_power\_output\_mw | Hourly gross power consumption of the ASU in the Allam Cycle LOX resource | MW |
+| (resource\_name)\_asu\_commit | Hourly unit commit status of the ASU in the Allam Cycle LOX resource |  |
+| (resource\_name)\_net\_power\_output\_mw | Hourly net power output of the Allam Cycle LOX resource | MW |
+| (resource\_name)\_storage\_lox\_t | Hourly status of charge of the LOX in the Allam Cycle LOX resource | t |
+| (resource\_name)\_lox\_in\_t | Hourly amount of liquid oxygen charged into the LOX in the Allam Cycle LOX resource | t |
+| (resource\_name)\_lox\_out\_t | Hourly amount of liquid oxygen discharged from the LOX in the Allam Cycle LOX resource | t |
+| (resource\_name)\_gox\_t | Hourly amount of gaseous oxygen produced by ASU in the Allam Cycle LOX resource | t |
+
+### 3.3 vre\_stor\_capacity.csv
+
+Reports optimal values of investment variables (except StartCap, which is an input) for co-located VRE and storage resources
+
+###### Table 3.3: Structure of the vre\_stor\_capacity.csv file
+---
+|**Output** |**Description** |**Units** |
+| :------------ | :-----------|:-----------|
+| StartCapSolar |Initial solar PV capacity of each resource type in each zone; this is an input |MW DC|
+| RetCapSolar |Retired solar PV capacity of each resource type in each zone |MW DC|
+| NewCapSolar |Installed solar PV capacity of each resource type in each zone |MW DC|
+| EndCapSolar| Total solar PV capacity of each resource type in each zone |MW DC|
+| StartCapWind |Initial wind capacity of each resource type in each zone; this is an input |MW AC|
+| RetCapWind |Retired wind capacity of each resource type in each zone |MW AC|
+| NewCapWind |Installed wind capacity of each resource type in each zone |MW AC|
+| EndCapWind| Total wind capacity of each resource type in each zone |MW AC|
+| StartCapElec |Initial electrolyzer capacity of each resource type in each zone; this is an input |MW AC|
+| RetCapElec |Retired electrolyzer capacity of each resource type in each zone |MW AC|
+| NewCapElec |Installed electrolyzer capacity of each resource type in each zone |MW AC|
+| EndCapElec| Total electrolyzer capacity of each resource type in each zone |MW AC|
+| StartCapDC |Initial inverter capacity of each resource type in each zone; this is an input |MW AC|
+| RetCapDC |Retired inverter capacity of each resource type in each zone |MW AC|
+| NewCapDC |Installed inverter capacity of each resource type in each zone |MW AC|
+| EndCapDC| Total inverter capacity of each resource type in each zone |MW AC|
+| StartCapGrid |Initial grid connection capacity of each resource type in each zone; this is an input |MW AC|
+| RetCapGrid |Retired grid connection capacity of each resource type in each zone |MW AC|
+| NewCapGrid |Installed grid connection capacity of each resource type in each zone |MW AC|
+| EndCapGrid| Total gri connection capacity of each resource type in each zone |MW AC|
+| StartEnergyCap |Initial energy capacity of each resource type in each zone; this is an input and applies only to storage tech.| MWh |
+| RetEnergyCap |Retired energy capacity of each resource type in each zone; applies only to storage tech. |MWh |
+| NewEnergyCap| Installed energy capacity of each resource type in each zone; applies only to storage tech. |MWh |
+| EndEnergyCap |Total installed energy capacity of each resource type in each zone; applies only to storage tech. |MWh |
+| StartChargeACCap| Initial charging AC power capacity of `STOR_AC_CHARGE = 2` resource type in each zone; this is an input |MW AC|
+| RetChargeACCap |Retired charging AC power capacity of `STOR_AC_CHARGE = 2` resource type in each zone |MW AC|
+| NewChargeACCap |Installed charging AC capacity of each resource type in each zone |MW AC|
+| EndChargeACCap |Total charging power AC capacity of each resource type in each zone |MW AC|
+| StartChargeDCCap| Initial charging DC power capacity of `STOR_DC_CHARGE = 2` resource type in each zone; this is an input |MW DC|
+| RetChargeDCCap |Retired charging DC power capacity of `STOR_DC_CHARGE = 2` resource type in each zone |MW DC|
+| NewChargeDCCap |Installed charging DC capacity of each resource type in each zone |MW DC|
+| EndChargeDCCap |Total charging power DC capacity of each resource type in each zone |MW DC|
+| StartDischargeACCap| Initial discharging AC power capacity of `STOR_AC_DISCHARGE = 2` resource type in each zone; this is an input |MW AC|
+| RetDischargeACCap |Retired discharging AC power capacity of `STOR_AC_DISCHARGE = 2` resource type in each zone |MW AC|
+| NewDischargeACCap |Installed discharging AC capacity of each resource type in each zone |MW AC|
+| EndDischargeACCap |Total discharging power AC capacity of each resource type in each zone |MW AC|
+| StartDischargeDCCap| Initial discharging DC power capacity of `STOR_DC_DISCHARGE = 2` resource type in each zone; this is an input |MW DC|
+| RetDischargeDCCap |Retired discharging DC power capacity of `STOR_DC_DISCHARGE = 2` resource type in each zone |MW DC|
+| NewDischargeDCCap |Installed discharging DC capacity of each resource type in each zone |MW DC|
+| EndDischargeDCCap |Total discharging power DC capacity of each resource type in each zone |MW DC|
+
+### 3.4 vre\_stor\_dc\_charge.csv
+
+Reports DC charging by each co-located VRE and storage resource (could include grid or BTM charging) in each model time step.
+
+### 3.5 vre\_stor\_ac\_charge.csv
+
+Reports AC charging by each co-located VRE and storage resource (could include grid or BTM charging) in each model time step.
+
+### 3.6 vre\_stor\_dc\_discharge.csv
+
+Reports storage DC discharging by each co-located VRE and storage resource in each model time step.
+
+### 3.7 vre\_stor\_ac\_discharge.csv
+
+Reports storage AC discharging charging by each co-located VRE and storage resource in each model time step.
+
+
+### 3.8 vre\_stor\_solar\_power.csv
+
+Reports solar PV generation in AC terms by each co-located VRE and storage resource in each model time step.
+
+### 3.9 vre\_stor\_wind\_power.csv
+
+Reports wind generation in AC terms by each co-located VRE and storage resource in each model time step.
+
+### 3.10 vre\_stor\_elec\_power\_consumption.csv
+
+Reports electrolyzer consumption in AC terms by each co-located VRE and storage resource in each model time step.
