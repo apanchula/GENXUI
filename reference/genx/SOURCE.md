@@ -8,6 +8,7 @@ when one is present (see `workspace.legacy_genx_root()`), falling back to these.
 | Bundled file | Upstream path (`GenX.jl/docs/src/`) |
 | --- | --- |
 | `model_configuration.md` | `User_Guide/model_configuration.md` |
+| `solver_configuration.md` | `User_Guide/solver_configuration.md` |
 | `model_input.md` | `User_Guide/model_input.md` |
 | `model_output.md` | `User_Guide/model_output.md` |
 | `TDR_input.md` | `User_Guide/TDR_input.md` |
@@ -29,6 +30,6 @@ instead; policy settings are already covered by `model_configuration.md` §3 and
 
 ## Updating
 
-Re-copy the five files from a newer `GenX.jl/docs/src/` checkout and update the
+Re-copy the files from a newer `GenX.jl/docs/src/` checkout and update the
 version / commit / date above. No code changes are needed — `help_docs.py`
 parses these at runtime.

@@ -52,6 +52,19 @@ def test_tdr_settings_key_resolves():
     assert help_docs.settings_help("MaxPeriods") is not None
 
 
+def test_solver_settings_keys_resolve():
+    # keys from gurobi_settings.yml / clp_settings.yml / highs_settings.yml
+    for k in ("Method", "Feasib_Tol", "Pre_Solve", "TimeLimit", "MIPGap"):
+        ph = help_docs.settings_help(k)
+        assert ph is not None, k
+    # the cross-solver Method row carries the per-solver parameter names
+    assert "gurobi" in help_docs.settings_help("Method").as_markdown().lower()
+
+
+def test_solver_topic_available():
+    assert any(t.slug == "solver" and t.available for t in help_docs.topics())
+
+
 # ── column_help ──────────────────────────────────────────────────────────────
 
 def test_resource_common_column_via_fallback():

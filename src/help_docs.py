@@ -25,20 +25,26 @@ _BUNDLED_DIR = Path(__file__).resolve().parent.parent / "reference" / "genx"
 
 # slug -> (bundled filename, path under GenX.jl/docs/src/)
 _DOCS: dict[str, tuple[str, str]] = {
-    "settings": ("model_configuration.md", "User_Guide/model_configuration.md"),
-    "inputs":   ("model_input.md",         "User_Guide/model_input.md"),
-    "outputs":  ("model_output.md",        "User_Guide/model_output.md"),
-    "tdr":      ("TDR_input.md",           "User_Guide/TDR_input.md"),
-    "intro":    ("model_introduction.md",  "Model_Concept_Overview/model_introduction.md"),
+    "settings": ("model_configuration.md",  "User_Guide/model_configuration.md"),
+    "solver":   ("solver_configuration.md", "User_Guide/solver_configuration.md"),
+    "inputs":   ("model_input.md",          "User_Guide/model_input.md"),
+    "outputs":  ("model_output.md",         "User_Guide/model_output.md"),
+    "tdr":      ("TDR_input.md",            "User_Guide/TDR_input.md"),
+    "intro":    ("model_introduction.md",   "Model_Concept_Overview/model_introduction.md"),
 }
 
 _TOPIC_TITLES: dict[str, str] = {
     "intro":    "GenX model overview",
     "settings": "Model settings (genx_settings.yml)",
+    "solver":   "Solver settings ([solver]_settings.yml)",
     "tdr":      "Time domain reduction",
     "inputs":   "Input files & columns",
     "outputs":  "Output files & columns",
 }
+
+# Doc slugs whose parameter tables feed settings_help() (flat 2-column tables
+# with `||continuation|` value rows).
+_KV_DOC_SLUGS = ("settings", "tdr", "solver")
 
 # Resource .csv files that inherit the "common to all resources" column table.
 _RESOURCE_STEMS = {
@@ -118,13 +124,13 @@ def _is_separator(cells: list[str]) -> bool:
 
 @lru_cache(maxsize=1)
 def _kv_index() -> dict[str, ParamHelp]:
-    """{param key -> ParamHelp} merged from the settings and TDR references.
+    """{param key -> ParamHelp} merged from the settings, TDR and solver references.
 
-    Both docs are flat 2-column tables (`|Name | Description|`) with optional
+    Each is a flat 2-column table (`|Name | Description|`) with optional
     continuation rows (`|| more text|`) that carry the enumerated values.
     """
     out: dict[str, ParamHelp] = {}
-    for slug in ("settings", "tdr"):
+    for slug in _KV_DOC_SLUGS:
         md = _doc_text(slug)
         if not md:
             continue
@@ -176,9 +182,9 @@ def _strip_inline(s: str) -> str:
 
 
 def settings_help(key: str) -> ParamHelp | None:
-    """Help for a `genx_settings.yml` (or `time_domain_reduction_settings.yml`)
-    key. GenX setting names are case-sensitive; we try exact first, then a
-    case-insensitive match as a convenience."""
+    """Help for a key in `genx_settings.yml`, `time_domain_reduction_settings.yml`,
+    or a `[solver]_settings.yml`. GenX setting names are case-sensitive; we try
+    exact first, then a case-insensitive match as a convenience."""
     idx = _kv_index()
     if key in idx:
         return idx[key]
