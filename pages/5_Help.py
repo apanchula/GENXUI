@@ -5,9 +5,10 @@ Pure reference — renders without a configured workspace. Content comes from
 """
 import streamlit as st
 
-from src import help_docs
+from src import help_docs, ui
 
 st.set_page_config(page_title="GenX – Help", layout="wide")
+ui.compact_layout()
 
 st.title("Help & GenX.jl Reference")
 st.caption(

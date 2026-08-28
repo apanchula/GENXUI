@@ -8,10 +8,11 @@ from pathlib import Path
 
 import archive_lib
 import report_lib
-from src import workspace
+from src import ui, workspace
 from src.resource_style import COLORS, resource_color  # noqa: F401  (COLORS used below)
 
 st.set_page_config(page_title="GenX – Results", layout="wide")
+ui.compact_layout()
 
 if workspace.get_workspace_root() is None:
     st.title("Results")

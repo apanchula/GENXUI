@@ -7,9 +7,10 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
-from src import examples, run_diagnosis, run_preview, run_settings, workspace
+from src import examples, run_diagnosis, run_preview, run_settings, ui, workspace
 
 st.set_page_config(page_title="GenX UI", layout="wide")
+ui.compact_layout()
 
 # ── Workspace setup gate ────────────────────────────────────────────────────
 # The workspace root is unset by default on first run. If unset, show a setup
@@ -118,14 +119,20 @@ def _render_run_preview(case_path: Path) -> None:
         if pv.error:
             st.caption(f"Preview unavailable — {pv.error}")
             return
+
+        parts = ["<div style='line-height:1.4;font-size:0.9rem'>"]
         if pv.timesteps is not None:
-            st.metric("Timesteps", f"{pv.timesteps:,}")
-        st.caption(pv.timesteps_basis)
+            parts.append(
+                f"<div style='font-size:1.5rem;font-weight:700;line-height:1.1'>{pv.timesteps:,}"
+                "<span style='font-size:0.8rem;font-weight:400;opacity:0.6'> timesteps</span></div>"
+            )
+        parts.append(f"<div style='opacity:0.6;font-size:0.8rem;margin-bottom:0.35rem'>{pv.timesteps_basis}</div>")
         for row in pv.rows:
-            line = f"**{row.label}** — {row.value}"
-            if row.hint:
-                line += f"  \n<span style='opacity:0.65;font-size:0.85em'>{row.hint}</span>"
-            st.markdown(line, unsafe_allow_html=True)
+            hint = f" <span style='opacity:0.55'>· {row.hint}</span>" if row.hint else ""
+            parts.append(f"<div><b>{row.label}</b> — {row.value}{hint}</div>")
+        parts.append("</div>")
+        st.markdown("".join(parts), unsafe_allow_html=True)
+
         for w in pv.warnings:
             st.warning(w)
 
