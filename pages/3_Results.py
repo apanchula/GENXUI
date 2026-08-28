@@ -13,7 +13,6 @@ from src.resource_style import COLORS, resource_color  # noqa: F401  (COLORS use
 
 st.set_page_config(page_title="GenX – Results", layout="wide")
 ui.compact_layout()
-ui.sidebar_brand()
 
 if workspace.get_workspace_root() is None:
     st.title("Results")

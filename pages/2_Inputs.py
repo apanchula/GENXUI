@@ -12,7 +12,6 @@ from src import fleet_view, help_docs, ui, workspace
 
 st.set_page_config(page_title="GenX – Inputs", layout="wide")
 ui.compact_layout()
-ui.sidebar_brand()
 
 if workspace.get_workspace_root() is None:
     st.title("Inputs")

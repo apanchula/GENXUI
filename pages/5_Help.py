@@ -9,7 +9,6 @@ from src import help_docs, ui
 
 st.set_page_config(page_title="GenX – Help", layout="wide")
 ui.compact_layout()
-ui.sidebar_brand()
 
 st.title("Help & GenX.jl Reference")
 st.caption(

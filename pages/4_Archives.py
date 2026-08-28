@@ -7,7 +7,6 @@ from src import ui, workspace
 
 st.set_page_config(page_title="GenX – Archives", layout="wide")
 ui.compact_layout()
-ui.sidebar_brand()
 
 if workspace.get_workspace_root() is None:
     st.title("Archives")
