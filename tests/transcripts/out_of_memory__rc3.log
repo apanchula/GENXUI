@@ -1,0 +1,28 @@
+Configuring Settings
+Time Series Data Already Clustered.
+Reading Input CSV Files
+...
+CSV Files Successfully Read In From <scrubbed>/data/2_three_zones_w_electrolyzer
+Generating the Optimization Model
+Discharge Module
+Electrolyzer Resources Module
+...
+Time elapsed for model building is
+41.2233
+Solving Model
+Running HiGHS 1.14.0 (git hash: 7df0786de3): Copyright (c) 2026 under Apache 2.0 license terms
+Using BLAS: blastrampoline-5
+LP has 262104 rows; 178533 cols; 731064 nonzeros
+Presolving model
+Solving the presolved LP
+
+Running HiPO
+Threads:                        6
+Range of bound intervals:       [2.4e-03, 1.7e+01]
+Scaling coefficients:           [3.1e-02, 6.4e+01]
+
+[33272] signal 22: SIGABRT
+in expression starting at <scrubbed>/data/2_three_zones_w_electrolyzer/Run.jl:3
+Allocations: 22464339 (Pool: 22463734; Big: 605); GC: 18
+terminate called after throwing an instance of 'std::bad_alloc'
+  what():  std::bad_alloc

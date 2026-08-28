@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
-from src import examples, workspace
+from src import examples, run_diagnosis, workspace
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 
@@ -57,6 +57,7 @@ for key, default in {
     "running": False,
     "output_lines": [],
     "return_code": None,
+    "run_diagnosis": None,
     "start_time": None,
     "elapsed_time": None,
 }.items():
@@ -64,15 +65,10 @@ for key, default in {
         st.session_state[key] = default
 
 
-def _is_package_resolution_failure(line: str) -> bool:
-    """True for a Julia error line indicating the GenX package (or one of its
-    deps) couldn't be resolved from this environment/cwd — as opposed to a
-    model/solve failure, which needs a different message to the user."""
-    return "ArgumentError" in line and "not found" in line
-
-
 def stream_process(case_path: Path, output_queue: queue.Queue):
-    """Run Julia in a thread, pushing output lines into the queue."""
+    """Run Julia in a thread, pushing raw output lines into the queue, then a
+    ("done", returncode) sentinel. Failure interpretation happens afterwards in
+    run_diagnosis.diagnose() — the streamed output is left verbatim."""
     try:
         proc = subprocess.Popen(
             ["julia", "--project=.", "Run.jl"],
@@ -82,24 +78,13 @@ def stream_process(case_path: Path, output_queue: queue.Queue):
             text=True,
             bufsize=1,
         )
-        package_failure = False
         for line in proc.stdout:
             output_queue.put(("line", line))
-            if not package_failure and _is_package_resolution_failure(line):
-                package_failure = True
         proc.wait()
-        if package_failure:
-            output_queue.put((
-                "line",
-                "\nERROR: GenX.jl package could not be resolved from this environment. "
-                "This isn't a model error — Julia couldn't find the GenX package (or a "
-                "dependency) from the case's working directory. Confirm GenX is available "
-                "in your default Julia environment or the case's project.\n",
-            ))
         output_queue.put(("done", proc.returncode))
     except FileNotFoundError:
         output_queue.put(("line", "ERROR: 'julia' not found on PATH.\n"))
-        output_queue.put(("done", 1))
+        output_queue.put(("done", 127))
 
 
 # ── System summary helpers ────────────────────────────────────────────────────
@@ -274,8 +259,19 @@ with col_controls:
         width="stretch",
     )
 
-    if st.session_state.return_code is not None and not st.session_state.running:
-        if st.session_state.return_code == 0:
+    _rc = st.session_state.return_code
+    if _rc is not None and not st.session_state.running:
+        _diag = st.session_state.run_diagnosis
+
+        if _diag is not None:
+            _box = st.error if _diag.severity == "error" else st.warning
+            _box(f"**{_diag.title}**\n\n{_diag.detail}")
+            st.info(f"**Try this:** {_diag.remedy}")
+            if _diag.docs_url:
+                st.link_button("GenX docs", _diag.docs_url, width="stretch")
+            st.caption(f"Exit code {_rc} · {_diag.signature_id}")
+
+        if _rc == 0 and (_diag is None or _diag.severity == "warning"):
             st.success(f"Completed in {st.session_state.elapsed_time:.0f}s")
             archive_label = st.text_input("Archive label (optional)", key="runner_archive_label")
             if st.button("📦 Archive this run", width="stretch"):
@@ -284,8 +280,8 @@ with col_controls:
                     st.success(f"Archived to `{archive_dir.name}`")
                 except archive_lib.ArchiveError as e:
                     st.error(str(e))
-        else:
-            st.error(f"Failed (exit code {st.session_state.return_code})")
+        elif _rc != 0 and _diag is None:
+            st.error(f"Failed (exit code {_rc})")
 
     if st.session_state.running:
         elapsed = time.time() - st.session_state.start_time
@@ -296,6 +292,7 @@ with col_controls:
     if st.button("Clear output", disabled=st.session_state.running):
         st.session_state.output_lines = []
         st.session_state.return_code = None
+        st.session_state.run_diagnosis = None
         st.session_state.elapsed_time = None
         st.rerun()
 
@@ -333,6 +330,7 @@ if run_btn:
     st.session_state.running = True
     st.session_state.output_lines = []
     st.session_state.return_code = None
+    st.session_state.run_diagnosis = None
     st.session_state.start_time = time.time()
     st.session_state.elapsed_time = None
 
@@ -358,6 +356,9 @@ if st.session_state.running:
                 st.session_state.return_code = payload
                 st.session_state.running = False
                 st.session_state.elapsed_time = time.time() - st.session_state.start_time
+                st.session_state.run_diagnosis = run_diagnosis.diagnose(
+                    "".join(st.session_state.output_lines), payload
+                )
 
         if st.session_state.running:
             time.sleep(0.25)

@@ -1,0 +1,10 @@
+ERROR: LoadError: ArgumentError: Package GenX not found in current path.
+- Run `import Pkg; Pkg.add("GenX")` to install the GenX package.
+Stacktrace:
+  [1] macro expansion
+    @ .\loading.jl:2296 [inlined]
+  [2] macro expansion
+    @ .\lock.jl:273 [inlined]
+  [3] __require(into::Module, mod::Symbol)
+    @ Base .\loading.jl:2271
+in expression starting at <scrubbed>/data/1_three_zones/Run.jl:1

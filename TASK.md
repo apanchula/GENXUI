@@ -86,9 +86,20 @@ let it solve to optimality. This is a solver-memory limitation of the machine,
 the case runs GenX correctly. `1_three_zones` is left in the workspace with
 that one settings tweak and its `results/` as evidence.
 
-**`_is_package_resolution_failure()`** (app.py) unit-checked against
-representative lines: matches `ArgumentError: Package X not found in ...`,
-does not match unrelated `MethodError` / stacktrace lines.
+**Follow-on (post-ticket, user-requested):** the ad-hoc
+`_is_package_resolution_failure()` banner was superseded by a general run
+error-diagnosis layer — `src/run_diagnosis.py` (ordered failure-signature
+catalog → structured `RunDiagnosis` with title / plain-language detail /
+"try this" remedy), rendered in `app.py` as a real status callout, terminal
+output left verbatim. Covers OOM (the case above now reports *"Ran out of
+memory — close other applications and run it again"*), infeasible, unbounded,
+time-limit, missing input, package resolution, plus a generic fallback and a
+scaling warning. `stream_process()` reverts to streaming raw lines only.
+Tests: `tests/test_run_diagnosis.py` (17 cases + captured transcripts), all
+passing; `streamlit` AppTest smoke-check clean. Design: `docs/proposal_run_error_diagnosis.md`.
+The GENXUI-2 `stream_process()` criterion is still met (package-resolution
+failure is one signature, `ArgumentError` + `not found`), just no longer via
+an inline banner line.
 
 ### Acceptance Criteria status
 - [x] `src/examples.py` — `list_example_cases()` / `import_example_case()` as specified; discovery returns all 11 `example_systems/*` cases, sorted, with README-derived descriptions; `[]` when the dir is absent.
