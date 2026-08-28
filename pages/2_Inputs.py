@@ -34,6 +34,21 @@ with st.sidebar:
     case_name = st.selectbox("Case", cases, index=_default_idx)
     case_path = workspace.data_dir() / case_name
 
+    # Switching Case leaves inputs_selected pointing at the previous case's file
+    # (which still exists on disk, so the "stale path" guard below never fires).
+    # Carry the selection over to the same file in the new case if it exists,
+    # otherwise drop it so the user gets the "pick a file" prompt.
+    _sel = st.session_state.inputs_selected
+    if _sel and not Path(_sel).is_relative_to(case_path):
+        for _root in (workspace.data_dir() / c for c in cases):
+            if Path(_sel).is_relative_to(_root):
+                _rel = Path(_sel).relative_to(_root)
+                _new = case_path / _rel
+                st.session_state.inputs_selected = str(_new) if _new.exists() else None
+                break
+        else:
+            st.session_state.inputs_selected = None
+
     st.divider()
 
     # Inject CSS: make sidebar buttons look like tree items
