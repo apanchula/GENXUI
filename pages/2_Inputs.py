@@ -75,8 +75,17 @@ with st.sidebar:
         padding: 0 6px;
         font-size: 0.82rem;
         border-radius: 4px;
+        overflow: hidden;
+        white-space: nowrap;
     }
-    section[data-testid="stSidebar"] div.stButton > button p { line-height: 1.55rem; margin: 0; }
+    section[data-testid="stSidebar"] div.stButton > button p {
+        line-height: 1.55rem;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
     section[data-testid="stSidebar"] div.stButton > button:hover {
         background: rgba(128,128,128,0.18) !important;
     }
@@ -106,7 +115,10 @@ with st.sidebar:
         with st.expander(f"📁  {dir_name}", expanded=True):
             for fp in files:
                 is_active = st.session_state.inputs_selected == str(fp)
-                label = f"{'▶ ' if is_active else '    '}📄 {fp.name}"
+                # ▶/▷ are a same-width pair; a leading run of spaces would be
+                # parsed by markdown as an indented code block (taller, boxed),
+                # which is what made the selected row jump out of line.
+                label = f"{'▶' if is_active else '▷'} 📄 {fp.name}"
                 if st.button(label, key=f"tree_{fp}"):
                     st.session_state.inputs_selected = str(fp)
                     st.rerun()
