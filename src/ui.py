@@ -4,25 +4,28 @@ import streamlit as st
 
 _CSS = """
 <style>
-/* Pull the main content up under the toolbar — Streamlit ships ~6rem here. */
+/* Main content: clear the fixed toolbar, but far less than Streamlit's ~6rem. */
 .block-container,
 [data-testid="stMainBlockContainer"] {
-    padding-top: 2rem;
+    padding-top: 3.5rem;
     padding-bottom: 2rem;
 }
-/* Smaller page titles (st.title renders a chunky h1). */
+/* Smaller page titles (st.title renders a chunky h1) — keep full line-height
+   and a little top padding so nothing clips. */
 [data-testid="stMainBlockContainer"] h1 {
-    font-size: 1.6rem;
-    padding-top: 0;
+    font-size: 1.7rem;
+    line-height: 1.3;
+    padding-top: 0.4rem;
     padding-bottom: 0.4rem;
 }
 /* Slightly tighter default spacing between stacked elements. */
 [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] { gap: 0.75rem; }
 
-/* Sidebar: pull everything up toward the toolbar. */
-[data-testid="stSidebar"] > div:first-child { padding-top: 0.5rem; }
-[data-testid="stSidebarHeader"] { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+/* Sidebar: raise everything toward the top. */
+[data-testid="stSidebar"] > div:first-child { padding-top: 0; }
+[data-testid="stSidebarHeader"] { padding-top: 0.25rem; padding-bottom: 0; min-height: 0; }
 [data-testid="stSidebarNav"] { padding-top: 0; margin-top: 0; }
+[data-testid="stSidebarNav"] ul { padding-top: 0.25rem; padding-bottom: 0.25rem; }
 [data-testid="stSidebarUserContent"] { padding-top: 0.5rem; }
 
 /* "GenXUI" brand — sits above the auto-generated page nav. */
@@ -32,7 +35,7 @@ _CSS = """
     font-size: 1.7rem;
     font-weight: 700;
     line-height: 1.2;
-    padding: 0 0 0.5rem 1.4rem;
+    padding: 0.25rem 0 0.4rem 1.4rem;
 }
 </style>
 """
