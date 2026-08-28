@@ -97,13 +97,6 @@ with st.sidebar:
     </style>
     """, unsafe_allow_html=True)
 
-    st.link_button(
-        "📖 GenX Input Docs",
-        "https://genxproject.github.io/GenX.jl/stable/User_Guide/model_input/",
-        width="stretch",
-    )
-    st.divider()
-
     for dir_name in TREE_DIRS:
         dir_path = case_path / dir_name
         if not dir_path.exists():
@@ -122,6 +115,13 @@ with st.sidebar:
                 if st.button(label, key=f"tree_{fp}"):
                     st.session_state.inputs_selected = str(fp)
                     st.rerun()
+
+    st.divider()
+    st.link_button(
+        "📖 GenX Input Docs",
+        "https://genxproject.github.io/GenX.jl/stable/User_Guide/model_input/",
+        width="stretch",
+    )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -212,6 +212,7 @@ with st.sidebar:
                     st.error(str(e))
 
     st.divider()
+    st.link_button("📖 GenX Docs", "https://genxproject.github.io/GenX.jl/stable/", width="stretch")
 
 
 # ── Layout ────────────────────────────────────────────────────────────────────
@@ -287,8 +288,6 @@ with col_controls:
     if st.session_state.running:
         elapsed = time.time() - st.session_state.start_time
         st.info(f"Running… {elapsed:.0f}s")
-
-    st.link_button("📖 GenX Docs", "https://genxproject.github.io/GenX.jl/stable/", width="stretch")
 
     if st.button("Clear output", disabled=st.session_state.running):
         st.session_state.output_lines = []
