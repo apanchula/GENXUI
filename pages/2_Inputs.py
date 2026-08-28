@@ -51,25 +51,34 @@ with st.sidebar:
 
     st.divider()
 
-    # Inject CSS: make sidebar buttons look like compact tree items
+    # Inject CSS: make the sidebar file buttons read as a compact, flat tree.
+    # Streamlit's default button paints a filled "secondary" background and a
+    # focus/active box-shadow — both are forced off here so the row is just text
+    # that tints on hover, with the highlight covering the whole row.
     st.markdown("""
     <style>
-    section[data-testid="stSidebar"] div.stButton > button {
+    section[data-testid="stSidebar"] div.stButton > button,
+    section[data-testid="stSidebar"] div.stButton > button:hover,
+    section[data-testid="stSidebar"] div.stButton > button:active,
+    section[data-testid="stSidebar"] div.stButton > button:focus,
+    section[data-testid="stSidebar"] div.stButton > button:focus-visible {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        color: inherit !important;
         text-align: left;
-        background: transparent;
-        border: none;
-        padding: 0 6px;
+        width: 100%;
         min-height: 0;
         height: 1.55rem;
         line-height: 1.55rem;
+        padding: 0 6px;
         font-size: 0.82rem;
-        width: 100%;
-        color: inherit;
+        border-radius: 4px;
     }
-    section[data-testid="stSidebar"] div.stButton > button p { line-height: 1.55rem; }
+    section[data-testid="stSidebar"] div.stButton > button p { line-height: 1.55rem; margin: 0; }
     section[data-testid="stSidebar"] div.stButton > button:hover {
-        background: rgba(128,128,128,0.18);
-        border: none;
+        background: rgba(128,128,128,0.18) !important;
     }
     /* tighten the vertical gap between consecutive tree rows */
     section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stVerticalBlock"] {
