@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
-from src import workspace
+from src import examples, workspace
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 
@@ -64,6 +64,13 @@ for key, default in {
         st.session_state[key] = default
 
 
+def _is_package_resolution_failure(line: str) -> bool:
+    """True for a Julia error line indicating the GenX package (or one of its
+    deps) couldn't be resolved from this environment/cwd — as opposed to a
+    model/solve failure, which needs a different message to the user."""
+    return "ArgumentError" in line and "not found" in line
+
+
 def stream_process(case_path: Path, output_queue: queue.Queue):
     """Run Julia in a thread, pushing output lines into the queue."""
     try:
@@ -75,9 +82,20 @@ def stream_process(case_path: Path, output_queue: queue.Queue):
             text=True,
             bufsize=1,
         )
+        package_failure = False
         for line in proc.stdout:
             output_queue.put(("line", line))
+            if not package_failure and _is_package_resolution_failure(line):
+                package_failure = True
         proc.wait()
+        if package_failure:
+            output_queue.put((
+                "line",
+                "\nERROR: GenX.jl package could not be resolved from this environment. "
+                "This isn't a model error — Julia couldn't find the GenX package (or a "
+                "dependency) from the case's working directory. Confirm GenX is available "
+                "in your default Julia environment or the case's project.\n",
+            ))
         output_queue.put(("done", proc.returncode))
     except FileNotFoundError:
         output_queue.put(("line", "ERROR: 'julia' not found on PATH.\n"))
@@ -186,6 +204,24 @@ with st.sidebar:
                 try:
                     dest = workspace.import_case_from_legacy(_import_choice)
                     st.success(f"Imported to `{dest.name}`")
+                    st.rerun()
+                except (FileNotFoundError, FileExistsError, OSError) as e:
+                    st.error(str(e))
+
+    with st.expander("🧪 Load GenX.jl example"):
+        _example_cases = examples.list_example_cases()
+        if not _example_cases:
+            st.caption(f"No examples found under `{workspace.legacy_genx_root() / examples.EXAMPLES_DIRNAME}`.")
+        else:
+            _example_names = [c.name for c in _example_cases]
+            _example_choice = st.selectbox("Example", _example_names, key="_example_case_select")
+            _selected_example = next(c for c in _example_cases if c.name == _example_choice)
+            if _selected_example.description:
+                st.caption(_selected_example.description)
+            if st.button("Load into active workspace", key="_example_case_btn"):
+                try:
+                    dest = examples.import_example_case(_example_choice)
+                    st.success(f"Loaded to `{dest.name}`")
                     st.rerun()
                 except (FileNotFoundError, FileExistsError, OSError) as e:
                     st.error(str(e))
