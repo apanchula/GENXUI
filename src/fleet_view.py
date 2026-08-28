@@ -50,10 +50,18 @@ class FleetResource:
     min_mw: float
     inv_cost: float
     new_build: bool
+    can_retire: bool
 
     @property
     def color(self) -> str:
         return resource_color(self.name)
+
+    @property
+    def exists(self) -> bool:
+        """False for a row that can't be built, can't be retired, and has no
+        existing capacity — it contributes nothing to any solve, so it's left
+        off the fleet diagrams."""
+        return self.new_build or self.can_retire or self.existing_mw > 0
 
 
 def _num(row: pd.Series, *keys: str, default: float = 0.0) -> float:
@@ -66,11 +74,15 @@ def _num(row: pd.Series, *keys: str, default: float = 0.0) -> float:
     return default
 
 
-def load_fleet(case_path: Path, filenames: list[str] | None = None) -> list[FleetResource]:
+def load_fleet(case_path: Path, filenames: list[str] | None = None,
+               include_absent: bool = False) -> list[FleetResource]:
     """Read the resource CSVs under `case_path/resources/` into FleetResources.
 
     `filenames` restricts to specific files (e.g. ["Thermal.csv"]); default is
     every known resource file that exists. Unknown files are ignored.
+
+    Rows that fail `FleetResource.exists` (New_Build 0, Can_Retire 0,
+    Existing_Cap_MW 0) are dropped unless `include_absent=True`.
     """
     res_dir = case_path / "resources"
     if not res_dir.exists():
@@ -91,7 +103,7 @@ def load_fleet(case_path: Path, filenames: list[str] | None = None) -> list[Flee
             if pd.isna(row.get("Resource")):
                 continue
             max_raw = _num(row, "Max_Cap_MW", default=_UNBOUNDED)
-            out.append(FleetResource(
+            fr = FleetResource(
                 name=str(row["Resource"]).strip(),
                 type=rtype,
                 zone=int(_num(row, "Zone", default=1)),
@@ -101,7 +113,10 @@ def load_fleet(case_path: Path, filenames: list[str] | None = None) -> list[Flee
                 min_mw=max(0.0, _num(row, "Min_Cap_MW")),
                 inv_cost=_num(row, "Inv_Cost_per_MWyr"),
                 new_build=bool(_num(row, "New_Build", default=0.0)),
-            ))
+                can_retire=bool(_num(row, "Can_Retire", default=0.0)),
+            )
+            if include_absent or fr.exists:
+                out.append(fr)
     return out
 
 

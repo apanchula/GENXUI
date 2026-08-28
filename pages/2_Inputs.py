@@ -264,9 +264,17 @@ def _bus_figure(layout: dict, uniform: bool) -> go.Figure:
     return fig
 
 
-def render_fleet_overview(resources, case_path: Path, key: str) -> None:
+def render_fleet_overview(case_path: Path, filenames, key: str) -> None:
+    loaded = fleet_view.load_fleet(case_path, filenames, include_absent=True)
+    resources = [r for r in loaded if r.exists]
+    hidden = len(loaded) - len(resources)
+
     if not resources:
-        st.info("No resources to visualize in this case.")
+        msg = "No resources to visualize in this case."
+        if hidden:
+            msg = (f"All {hidden} resource row(s) here are non-existent "
+                   "(no existing capacity, and neither buildable nor retireable).")
+        st.info(msg)
         return
 
     m = fleet_view.fleet_metrics(resources)
@@ -282,6 +290,9 @@ def render_fleet_overview(resources, case_path: Path, key: str) -> None:
     c4.metric("New-build candidates", m["candidate_count"])
     c5.metric("Peak demand", f"{sum(demand.values()):,.0f} MW" if demand else "—")
     st.caption(" · ".join(f"{t}: {n}" for t, n in m["by_type"].items()))
+    if hidden:
+        st.caption(f"{hidden} non-existent row(s) hidden — no existing capacity, "
+                   "not buildable, not retireable.")
     if note:
         st.caption(f"⚠ {note}")
 
@@ -324,7 +335,7 @@ if selected == ALL_RESOURCES:
     st.title("All resources")
     st.caption(f"`{case_name}` · every resource file combined")
     st.divider()
-    render_fleet_overview(fleet_view.load_fleet(case_path), case_path, key="all")
+    render_fleet_overview(case_path, None, key="all")
     st.stop()
 
 sel_path = Path(selected)
@@ -393,9 +404,7 @@ if folder == "resources" and sel_path.name in fleet_view.RESOURCE_FILES:
         label_visibility="collapsed", key=f"view_{sel_path.name}",
     )
     if _view == "Overview":
-        render_fleet_overview(
-            fleet_view.load_fleet(case_path, [sel_path.name]), case_path, key=sel_path.stem,
-        )
+        render_fleet_overview(case_path, [sel_path.name], key=sel_path.stem)
     else:
         _resource_editor(df)
 

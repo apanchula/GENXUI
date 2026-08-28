@@ -18,14 +18,19 @@ from src.resource_style import COLORS, resource_color    # noqa: E402
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
 _THERMAL = (
-    "Resource,Zone,Existing_Cap_MW,Max_Cap_MW,Min_Cap_MW,Inv_Cost_per_MWyr,New_Build,region\n"
-    "MA_natural_gas,1,0,-1,0,65400,1,MA\n"
-    "CT_natural_gas,2,0,-1,0,65400,1,CT\n"
+    "Resource,Zone,Existing_Cap_MW,Max_Cap_MW,Min_Cap_MW,Inv_Cost_per_MWyr,New_Build,Can_Retire,region\n"
+    "MA_natural_gas,1,0,-1,0,65400,1,0,MA\n"
+    "CT_natural_gas,2,0,-1,0,65400,1,0,CT\n"
 )
 _VRE_FIXED = (
-    "Resource,Zone,Existing_Cap_MW,Max_Cap_MW,Min_Cap_MW,Inv_Cost_per_MWyr,New_Build,region\n"
-    "CA_solar,1,400,400,0,85300,1,CA\n"
-    "CA_wind,1,0,0,0,97200,0,CA\n"
+    "Resource,Zone,Existing_Cap_MW,Max_Cap_MW,Min_Cap_MW,Inv_Cost_per_MWyr,New_Build,Can_Retire,region\n"
+    "CA_solar,1,400,400,0,85300,1,0,CA\n"
+    "CA_wind,1,0,0,0,97200,0,1,CA\n"          # 0 MW but retireable -> still 'exists'
+)
+_WITH_PHANTOM = (
+    "Resource,Zone,Existing_Cap_MW,Max_Cap_MW,New_Build,Can_Retire,region\n"
+    "REAL_plant,1,100,100,0,0,CA\n"
+    "GHOST_plant,1,0,0,0,0,CA\n"              # can't build, can't retire, 0 MW -> dropped
 )
 _NETWORK_LIST = (
     ",Network_zones,Network_Lines,Start_Zone,End_Zone,Line_Max_Flow_MW\n"
@@ -73,6 +78,22 @@ def test_load_fleet_filename_filter():
 def test_load_fleet_no_resources_dir():
     with tempfile.TemporaryDirectory() as t:
         assert fv.load_fleet(Path(t)) == []
+
+
+def test_load_fleet_drops_nonexistent_rows():
+    with tempfile.TemporaryDirectory() as t:
+        c = _case(Path(t), {"Thermal.csv": _WITH_PHANTOM})
+        shown = fv.load_fleet(c)
+        assert [r.name for r in shown] == ["REAL_plant"]
+        assert len(fv.load_fleet(c, include_absent=True)) == 2
+
+
+def test_fleetresource_exists_property():
+    with tempfile.TemporaryDirectory() as t:
+        c = _case(Path(t), {"Thermal.csv": _WITH_PHANTOM})
+        by_name = {r.name: r for r in fv.load_fleet(c, include_absent=True)}
+        assert by_name["REAL_plant"].exists is True
+        assert by_name["GHOST_plant"].exists is False
 
 
 # ── metrics ─────────────────────────────────────────────────────────────────
