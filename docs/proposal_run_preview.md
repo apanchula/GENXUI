@@ -1,4 +1,7 @@
-<!-- status: proposal · owner: GenXUI · created 2026-08-28 -->
+<!-- status: implemented 2026-08-28 as GENXUI-4 · src/run_preview.py + app.py expander · tests/test_run_preview.py -->
+<!-- deviations: multi-stage cases read inputs/inputs_p1/ and carry a "describes stage 1" warning;
+     the model-size hint (§"Rough model-size hint") was not built. -->
+
 
 # Proposal: "Run preview" panel — what this run will actually solve
 

@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
-from src import examples, run_diagnosis, run_settings, workspace
+from src import examples, run_diagnosis, run_preview, run_settings, workspace
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 
@@ -85,6 +85,49 @@ def stream_process(case_path: Path, output_queue: queue.Queue):
     except FileNotFoundError:
         output_queue.put(("line", "ERROR: 'julia' not found on PATH.\n"))
         output_queue.put(("done", 127))
+
+
+# ── Run preview (GENXUI-4) ────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def _cached_run_preview(case_str: str, sig: tuple) -> run_preview.RunPreview:
+    del sig  # only present to key the cache on input-file mtimes
+    return run_preview.build_run_preview(Path(case_str))
+
+
+def _preview_signature(case_path: Path) -> tuple:
+    """mtimes of the inputs the preview reads, so it recomputes only on edits."""
+    paths = [
+        case_path / "settings",
+        case_path / "resources",
+        case_path / "policies",
+        case_path / "system" / "Demand_data.csv",
+        case_path / "TDR_results" / "Demand_data.csv",
+    ]
+    out = []
+    for p in paths:
+        try:
+            out.append(p.stat().st_mtime)
+        except OSError:
+            out.append(0.0)
+    return tuple(out)
+
+
+def _render_run_preview(case_path: Path) -> None:
+    pv = _cached_run_preview(str(case_path), _preview_signature(case_path))
+    with st.expander("🔎 Run preview", expanded=False):
+        if pv.error:
+            st.caption(f"Preview unavailable — {pv.error}")
+            return
+        if pv.timesteps is not None:
+            st.metric("Timesteps", f"{pv.timesteps:,}")
+        st.caption(pv.timesteps_basis)
+        for row in pv.rows:
+            line = f"**{row.label}** — {row.value}"
+            if row.hint:
+                line += f"  \n<span style='opacity:0.65;font-size:0.85em'>{row.hint}</span>"
+            st.markdown(line, unsafe_allow_html=True)
+        for w in pv.warnings:
+            st.warning(w)
 
 
 # ── System summary helpers ────────────────────────────────────────────────────
@@ -260,6 +303,8 @@ with col_controls:
         width="stretch",
     )
     st.caption("Runs overwrite this case's `results/`. Use **📦 Archive this run** to keep a copy.")
+
+    _render_run_preview(case_path)
 
     _rc = st.session_state.return_code
     if _rc is not None and not st.session_state.running:
