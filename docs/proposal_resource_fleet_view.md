@@ -117,11 +117,13 @@ files stay table-only), **sizing-metric selector with graceful fallback**.
   `bus_layout()` (single-zone → central hub; multi-zone → hub ring + tie-lines;
   per-zone demand centre as a red load node hanging off each hub).
 - `pages/2_Inputs.py`:
-  - "★ All resources" entry at the top of the sidebar tree → combined Overview.
-  - `Table | Overview` `st.segmented_control` on each resource file (default
-    Table; the editor and its save path are unchanged).
-  - Overview = sizing radio + 4-metric row + by-type caption + `px.treemap`
-    (`fleet > Zone > Type > Resource`) + hub-and-spoke `go.Figure` bus diagram.
+  - "★ All Resources Graph" entry at the top of the sidebar tree → the combined
+    graphical view. (An earlier build also put a `Table | Overview` toggle on
+    each individual resource file; that was dropped — the combined graph is the
+    only graphical view, individual files stay table-only.)
+  - The graph = sizing radio + 5-metric row + by-type caption + `px.treemap`
+    (`fleet > Zone > Type > Resource`) + hub-and-spoke `go.Figure` bus diagram
+    with per-zone demand nodes. Rows failing `FleetResource.exists` are hidden.
 - `tests/test_fleet_view.py`: 16 cases (parsing, sentinel handling, greenfield
   vs fixed-fleet metrics, both network interfaces, single/multi-zone layout).
   All pass; `streamlit` AppTest clean on all four pages.

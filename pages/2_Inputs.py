@@ -107,7 +107,7 @@ with st.sidebar:
     )
     if _has_resource_files:
         _all_active = st.session_state.inputs_selected == ALL_RESOURCES
-        if st.button(f"{'▶' if _all_active else '▷'} ★ All resources", key="tree_all_resources"):
+        if st.button(f"{'▶' if _all_active else '▷'} ★ All Resources Graph", key="tree_all_resources"):
             st.session_state.inputs_selected = ALL_RESOURCES
             st.rerun()
 
@@ -264,8 +264,9 @@ def _bus_figure(layout: dict, uniform: bool) -> go.Figure:
     return fig
 
 
-def render_fleet_overview(case_path: Path, filenames, key: str) -> None:
-    loaded = fleet_view.load_fleet(case_path, filenames, include_absent=True)
+def render_fleet_overview(case_path: Path, key: str = "all") -> None:
+    """Combined graphical view over every resource file in the case."""
+    loaded = fleet_view.load_fleet(case_path, include_absent=True)
     resources = [r for r in loaded if r.exists]
     hidden = len(loaded) - len(resources)
 
@@ -332,10 +333,10 @@ if not selected:
     st.stop()
 
 if selected == ALL_RESOURCES:
-    st.title("All resources")
+    st.title("All Resources Graph")
     st.caption(f"`{case_name}` · every resource file combined")
     st.divider()
-    render_fleet_overview(case_path, None, key="all")
+    render_fleet_overview(case_path)
     st.stop()
 
 sel_path = Path(selected)
@@ -398,17 +399,7 @@ def _resource_editor(frame: pd.DataFrame) -> None:
     save_df(edited, sel_path, key=f"save_{sel_path.name}")
 
 
-if folder == "resources" and sel_path.name in fleet_view.RESOURCE_FILES:
-    _view = st.segmented_control(
-        "view", ["Table", "Overview"], default="Table",
-        label_visibility="collapsed", key=f"view_{sel_path.name}",
-    )
-    if _view == "Overview":
-        render_fleet_overview(case_path, [sel_path.name], key=sel_path.stem)
-    else:
-        _resource_editor(df)
-
-elif folder in ("resources", "policies"):
+if folder in ("resources", "policies"):
     _resource_editor(df)
 
 # ── System / Demand_data: editable NSE segments + demand chart ────────────────
