@@ -182,7 +182,7 @@ def _build(case_path: Path) -> RunPreview:
 
     warnings: list[str] = []
     if multi_stage and input_root != case_path:
-        warnings.append("Multi-stage case — this preview describes **stage 1** only.")
+        warnings.append("Multi-stage case — this preview describes stage 1 only.")
     tdr_on = _as_int(setup["TimeDomainReduction"]) == 1
 
     # ── timesteps ──────────────────────────────────────────────────────────
@@ -195,13 +195,13 @@ def _build(case_path: Path) -> RunPreview:
         )
         if "TimeDomainReduction" not in genx_raw:
             warnings.append(
-                "`TimeDomainReduction` isn't set — it defaults to **off**, so the "
+                "TimeDomainReduction isn't set — it defaults to off, so the "
                 "full time series will be solved."
             )
         if _tdr_complete(tdr_dir):
             warnings.append(
-                f"`{tdr_name}/` holds clustered data but `TimeDomainReduction` is "
-                "off — it will be **ignored**."
+                f"{tdr_name}/ holds clustered data but TimeDomainReduction is "
+                "off — it will be ignored."
             )
     elif _tdr_complete(tdr_dir):
         tdr_demand = _demand_file(tdr_dir)
@@ -235,14 +235,14 @@ def _build(case_path: Path) -> RunPreview:
 
         if tdr_dir.exists() and _demand_file(tdr_dir) is not None:
             warnings.append(
-                f"`{tdr_name}/` is incomplete (missing one of Demand/Generators_variability/"
-                "Fuels_data) — GenX will re-cluster from scratch."
+                f"{tdr_name}/ is incomplete (missing one of Demand / "
+                "Generators_variability / Fuels_data) — GenX will re-cluster from scratch."
             )
         rep_sys = _first_val(sys_demand, "Rep_Periods")
         if rep_sys not in (None, 1.0):
             warnings.append(
-                "`system/Demand_data.csv` already looks clustered (`Rep_Periods` ≠ 1) — "
-                "GenX will stop with a `prevent_doubled_timedomainreduction` error."
+                "system/Demand_data.csv already looks clustered (Rep_Periods ≠ 1) — "
+                "GenX will stop with a prevent_doubled_timedomainreduction error."
             )
 
     # ── rows ───────────────────────────────────────────────────────────────

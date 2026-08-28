@@ -92,7 +92,7 @@ def test_tdr_folder_ignored_when_flag_off():
     with tempfile.TemporaryDirectory() as t:
         pv = build_run_preview(_mk(Path(t), genx="UCommit: 0\n", tdr_files=_TDR_TRIPLE))
         assert pv.timesteps == 48
-        assert any("will be **ignored**" in w for w in pv.warnings)
+        assert any("will be ignored" in w for w in pv.warnings)
 
 
 def test_tdr_partial_folder_warns_and_reclusters():

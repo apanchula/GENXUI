@@ -130,11 +130,14 @@ def _render_run_preview(case_path: Path) -> None:
         for row in pv.rows:
             hint = f" <span style='opacity:0.55'>· {row.hint}</span>" if row.hint else ""
             parts.append(f"<div><b>{row.label}</b> — {row.value}{hint}</div>")
+        for w in pv.warnings:
+            parts.append(
+                "<div style='margin-top:0.4rem;padding:0.3rem 0.5rem;font-size:0.85rem;"
+                "background:rgba(128,128,128,0.14);border-radius:4px'>⚠&nbsp;"
+                f"{w}</div>"
+            )
         parts.append("</div>")
         st.markdown("".join(parts), unsafe_allow_html=True)
-
-        for w in pv.warnings:
-            st.warning(w)
 
 
 # ── System summary helpers ────────────────────────────────────────────────────
