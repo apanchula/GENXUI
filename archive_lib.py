@@ -157,8 +157,9 @@ def compute_headline_metrics(results_dir: Path) -> dict:
 
 def create_archive(case_path: Path, genx_root: Path, *, label: str | None = None) -> Path:
     archive_root = workspace.archive_dir()
-    results_src = case_path / "results"
-    if not results_src.exists() or not any(results_src.iterdir()):
+    # GenX may have written results/, or results_1/, results_2/… — archive the latest.
+    results_src = workspace.resolve_results_dir(case_path)
+    if results_src is None:
         raise ArchiveError(f"No results found for `{case_path.name}` — run the model first.")
 
     clean_label = sanitize_label(label)

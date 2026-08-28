@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
-from src import examples, run_diagnosis, workspace
+from src import examples, run_diagnosis, run_settings, workspace
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 
@@ -258,6 +258,7 @@ with col_controls:
         type="primary",
         width="stretch",
     )
+    st.caption("Runs overwrite this case's `results/`. Use **📦 Archive this run** to keep a copy.")
 
     _rc = st.session_state.return_code
     if _rc is not None and not st.session_state.running:
@@ -327,6 +328,13 @@ with col_terminal:
 
 # ── Launch run ────────────────────────────────────────────────────────────────
 if run_btn:
+    # GenXUI runs overwrite results/ rather than spilling to results_1/, _2/…
+    # (history is kept via "Archive this run", not GenX's folder fan-out).
+    _ovw = run_settings.ensure_overwrite_results(case_path)
+    if _ovw:
+        st.toast(f"Set `OverwriteResults: 1` for `{case_name}` — runs now overwrite "
+                 "`results/`. Use “Archive this run” to keep copies.", icon="⚙️")
+
     st.session_state.running = True
     st.session_state.output_lines = []
     st.session_state.return_code = None

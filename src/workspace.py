@@ -11,6 +11,7 @@ The chosen root is persisted to `~/.genxui/config.json` so it survives a full
 server restart, not just a Streamlit page rerun.
 """
 import json
+import re
 from pathlib import Path
 
 CONFIG_DIR = Path.home() / ".genxui"
@@ -86,6 +87,39 @@ def discover_cases() -> list[str]:
     """List subdirectories of data_dir() that look like a GenX case (contain Run.jl)."""
     d = data_dir()
     return sorted(p.name for p in d.iterdir() if p.is_dir() and (p / "Run.jl").exists())
+
+
+def resolve_results_dir(case_path: Path) -> Path | None:
+    """The results folder GenXUI should display / archive for a case.
+
+    GenX writes to `results/` on the first run, then `results_1/`, `results_2/`,
+    … on subsequent runs unless `OverwriteResults: 1` is set (see
+    `src/run_settings.py`). This picks the run the user actually means:
+
+      - the most recently modified of `results/` and any `results_N/`
+        (ignoring empty ones), suffix number as the tie-breaker;
+      - `None` when the case has no results at all.
+
+    Most-recent-mtime (not highest suffix) is deliberate: once GenXUI runs
+    overwrite `results/` in place, a fresh `results/` must win over a stale
+    `results_1/` left over from the old fan-out behaviour.
+
+    Does NOT descend into the multi-stage `results/results_p*/` layout.
+    """
+    candidates: list[tuple[float, int, Path]] = []
+
+    plain = case_path / "results"
+    if plain.is_dir() and any(plain.iterdir()):
+        candidates.append((plain.stat().st_mtime, 0, plain))
+
+    for p in case_path.glob("results_*"):
+        m = re.fullmatch(r"results_(\d+)", p.name)
+        if m and p.is_dir() and any(p.iterdir()):
+            candidates.append((p.stat().st_mtime, int(m.group(1)), p))
+
+    if not candidates:
+        return None
+    return max(candidates)[2]
 
 
 # ── Legacy-location helpers (import + migration notice only) ──────────────────

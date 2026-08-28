@@ -64,7 +64,8 @@ with st.sidebar:
         _default_idx = cases.index(_default_case) if _default_case in cases else 0
         case_name = st.selectbox("Case", cases, index=_default_idx)
         case_path = workspace.data_dir() / case_name
-        results_dir = case_path / "results"
+        # GenX may have written results/, or results_1/, results_2/… — show the latest.
+        results_dir = workspace.resolve_results_dir(case_path)
         inputs_dir = case_path
 
     st.divider()
@@ -95,7 +96,7 @@ with st.sidebar:
     )
 
 # ── Guard: no results yet ─────────────────────────────────────────────────────
-if not results_dir.exists():
+if results_dir is None or not results_dir.exists():
     st.title("Results")
     st.info(
         f"No results found for **{case_name}**.  \n"
