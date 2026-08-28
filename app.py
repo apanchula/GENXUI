@@ -309,12 +309,12 @@ with col_controls:
     st.markdown("""
     <style>
     .st-key-run_genx button {
-        background-color: #16a34a !important;
-        border-color: #16a34a !important;
-    }
-    .st-key-run_genx button:hover:not(:disabled) {
         background-color: #15803d !important;
         border-color: #15803d !important;
+    }
+    .st-key-run_genx button:hover:not(:disabled) {
+        background-color: #166534 !important;
+        border-color: #166534 !important;
     }
     </style>
     """, unsafe_allow_html=True)
