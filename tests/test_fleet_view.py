@@ -173,7 +173,45 @@ def test_bus_layout_multi_zone_with_ties():
 
 def test_bus_layout_empty():
     lay = fv.bus_layout([])
-    assert lay == {"hubs": [], "nodes": [], "spokes": [], "ties": []}
+    assert all(lay[k] == [] for k in ("hubs", "nodes", "spokes", "ties", "loads", "load_edges"))
+
+
+def test_bus_layout_demand_adds_load_nodes():
+    with tempfile.TemporaryDirectory() as t:
+        res = fv.load_fleet(_case(Path(t), {"Thermal.csv": _THERMAL}))
+        lay = fv.bus_layout(res, tie_lines=[(1, 2)], demand={1: 8000.0, 2: 3000.0})
+        assert {ld["zone"]: ld["mw"] for ld in lay["loads"]} == {1: 8000.0, 2: 3000.0}
+        assert len(lay["load_edges"]) == 2
+
+
+def test_bus_layout_demand_only_zone_still_gets_a_hub():
+    # a zone that has demand but no resources should still appear
+    lay = fv.bus_layout([], demand={5: 1200.0})
+    assert [h["zone"] for h in lay["hubs"]] == [5]
+    assert lay["loads"][0]["mw"] == 1200.0
+
+
+# ── zone demand ─────────────────────────────────────────────────────────────
+
+_DEMAND = (
+    "Voll,Demand_Segment,Time_Index,Demand_MW_z1,Demand_MW_z2\n"
+    "50000,1,1,7850,2242\n"
+    ",2,2,9100,2000\n"
+    ",,3,8000,2500\n"
+)
+
+
+def test_read_zone_demand_peaks():
+    with tempfile.TemporaryDirectory() as t:
+        c = Path(t)
+        (c / "system").mkdir()
+        (c / "system" / "Demand_data.csv").write_text(_DEMAND, encoding="utf-8")
+        assert fv.read_zone_demand(c) == {1: 9100.0, 2: 2500.0}
+
+
+def test_read_zone_demand_absent():
+    with tempfile.TemporaryDirectory() as t:
+        assert fv.read_zone_demand(Path(t)) == {}
 
 
 # ── colours ─────────────────────────────────────────────────────────────────

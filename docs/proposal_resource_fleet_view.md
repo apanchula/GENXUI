@@ -113,7 +113,9 @@ files stay table-only), **sizing-metric selector with graceful fallback**.
 - `src/fleet_view.py` (new): `load_fleet()`, `fleet_metrics()`, `size_series()`
   (uniform fallback + caption when the metric is all-zero/all-sentinel),
   `fleet_frame()`, `read_network_lines()` (list **and** matrix interfaces),
-  `bus_layout()` (single-zone → central hub; multi-zone → hub ring + tie-lines).
+  `read_zone_demand()` (peak MW per zone from `system/Demand_data.csv`),
+  `bus_layout()` (single-zone → central hub; multi-zone → hub ring + tie-lines;
+  per-zone demand centre as a red load node hanging off each hub).
 - `pages/2_Inputs.py`:
   - "★ All resources" entry at the top of the sidebar tree → combined Overview.
   - `Table | Overview` `st.segmented_control` on each resource file (default

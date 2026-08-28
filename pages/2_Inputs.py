@@ -206,6 +206,27 @@ def _bus_figure(layout: dict, uniform: bool) -> go.Figure:
             line=dict(color="rgba(128,128,128,0.30)", width=1),
             hoverinfo="skip", showlegend=False,
         ))
+    # hub -> load stubs
+    for x0, y0, x1, y1 in layout.get("load_edges", []):
+        fig.add_trace(go.Scatter(
+            x=[x0, x1], y=[y0, y1], mode="lines",
+            line=dict(color="rgba(192,57,43,0.55)", width=2, dash="dot"),
+            hoverinfo="skip", showlegend=False,
+        ))
+    # load nodes (demand centres)
+    loads = layout.get("loads", [])
+    if loads:
+        mx = max((ld["mw"] for ld in loads), default=1.0) or 1.0
+        fig.add_trace(go.Scatter(
+            x=[ld["x"] for ld in loads], y=[ld["y"] for ld in loads],
+            mode="markers",
+            marker=dict(symbol="triangle-down", line=dict(width=1, color="white"),
+                        color="#c0392b",
+                        size=[14 + 22 * math.sqrt(ld["mw"] / mx) for ld in loads]),
+            customdata=[[ld["zone"], ld["mw"]] for ld in loads],
+            hovertemplate="load · zone %{customdata[0]}<br>peak %{customdata[1]:,.0f} MW<extra></extra>",
+            showlegend=False,
+        ))
     # hub nodes
     if layout["hubs"]:
         fig.add_trace(go.Scatter(
@@ -249,15 +270,17 @@ def render_fleet_overview(resources, case_path: Path, key: str) -> None:
         return
 
     m = fleet_view.fleet_metrics(resources)
+    demand = fleet_view.read_zone_demand(case_path)
     metric_label = st.radio("Size by", list(fleet_view.SIZE_METRICS),
                             horizontal=True, key=f"fv_size_{key}")
     sizes, uniform, note = fleet_view.size_series(resources, fleet_view.SIZE_METRICS[metric_label])
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Resources", m["count"])
     c2.metric("Zones", m["n_zones"])
     c3.metric("Built capacity", f"{m['existing_total_mw']:,.0f} MW")
     c4.metric("New-build candidates", m["candidate_count"])
+    c5.metric("Peak demand", f"{sum(demand.values()):,.0f} MW" if demand else "—")
     st.caption(" · ".join(f"{t}: {n}" for t, n in m["by_type"].items()))
     if note:
         st.caption(f"⚠ {note}")
@@ -279,10 +302,14 @@ def render_fleet_overview(resources, case_path: Path, key: str) -> None:
 
     st.markdown("**Zone / bus topology**")
     ties = fleet_view.read_network_lines(case_path)
-    st.plotly_chart(_bus_figure(fleet_view.bus_layout(resources, sizes, ties), uniform),
-                    width="stretch", key=f"fv_bus_{key}")
+    layout = fleet_view.bus_layout(resources, sizes, ties, demand)
+    st.plotly_chart(_bus_figure(layout, uniform), width="stretch", key=f"fv_bus_{key}")
+
+    _notes = ["🔻 red = per-zone demand centre (peak MW)"] if demand else \
+             ["no `system/Demand_data.csv` — demand centres not shown"]
     if not ties and m["n_zones"] > 1:
-        st.caption("No `system/Network.csv` — zone hubs shown without tie-lines.")
+        _notes.append("no `system/Network.csv` — hubs shown without tie-lines")
+    st.caption(" · ".join(_notes))
 
 
 # ── Main content ──────────────────────────────────────────────────────────────

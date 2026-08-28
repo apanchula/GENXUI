@@ -8,6 +8,7 @@ See docs/proposal_resource_fleet_view.md.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -206,6 +207,34 @@ def read_network_lines(case_path: Path) -> list[tuple[int, int]]:
     return lines
 
 
+def read_zone_demand(case_path: Path) -> dict[int, float]:
+    """Peak demand (MW) per zone from system/Demand_data.csv (or Load_data.csv).
+
+    Returns {zone_number: peak_MW}; {} if the file or the Demand_MW_z* columns
+    aren't there.
+    """
+    for name in ("Demand_data.csv", "Load_data.csv"):
+        fp = case_path / "system" / name
+        if fp.exists():
+            break
+    else:
+        return {}
+    try:
+        df = pd.read_csv(fp)
+    except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError):
+        return {}
+
+    out: dict[int, float] = {}
+    for col in df.columns:
+        m = re.fullmatch(r"(?:Demand|Load)_MW_z(\d+)", str(col))
+        if not m:
+            continue
+        peak = pd.to_numeric(df[col], errors="coerce").max()
+        if pd.notna(peak):
+            out[int(m.group(1))] = float(peak)
+    return out
+
+
 def _is_zcol(c: object) -> bool:
     s = str(c)
     return len(s) >= 2 and s[0] in "zZ" and s[1:].isdigit()
@@ -216,18 +245,25 @@ def _zcol_num(c: object) -> int:
 
 
 def bus_layout(resources: list[FleetResource], sizes: list[float] | None = None,
-               tie_lines: list[tuple[int, int]] | None = None) -> dict:
+               tie_lines: list[tuple[int, int]] | None = None,
+               demand: dict[int, float] | None = None) -> dict:
     """Hub-and-spoke coordinates for the bus diagram.
 
     One hub per zone; resources radiate off their zone's hub; hubs are linked
-    by `tie_lines`. Single-zone collapses to one central hub. Sizes (if given,
-    aligned to `resources`) are passed straight through onto the node dicts for
-    the page to scale.
+    by `tie_lines`; each zone's demand (from `demand`, {zone: peak_MW}) hangs
+    off its hub as a load node pointing away from the grid centre. Single-zone
+    collapses to one central hub. `sizes` (aligned to `resources`) passes
+    straight through onto the node dicts for the page to scale.
     """
     sizes = sizes or [1.0] * len(resources)
-    zones = sorted({r.zone for r in resources} | {z for pair in (tie_lines or []) for z in pair})
+    demand = demand or {}
+    zones = sorted(
+        {r.zone for r in resources}
+        | {z for pair in (tie_lines or []) for z in pair}
+        | set(demand)
+    )
     if not zones:
-        return {"hubs": [], "nodes": [], "spokes": [], "ties": []}
+        return {"hubs": [], "nodes": [], "spokes": [], "ties": [], "loads": [], "load_edges": []}
 
     hub_r = 0.0 if len(zones) == 1 else 3.2
     hub_xy: dict[int, tuple[float, float]] = {}
@@ -256,12 +292,29 @@ def bus_layout(resources: list[FleetResource], sizes: list[float] | None = None,
             })
             spokes.append((nx, ny, hx, hy))
 
+    # load node per zone — offset radially outward (down, for a single hub)
+    load_r = 1.9
+    loads, load_edges = [], []
+    for z, mw in demand.items():
+        if z not in hub_xy:
+            continue
+        hx, hy = hub_xy[z]
+        if len(zones) == 1:
+            ux, uy = 0.0, -1.0
+        else:
+            d = math.hypot(hx, hy) or 1.0
+            ux, uy = hx / d, hy / d
+        lx, ly = hx + load_r * ux, hy + load_r * uy
+        loads.append({"zone": z, "x": lx, "y": ly, "mw": mw})
+        load_edges.append((hx, hy, lx, ly))
+
     ties = []
     for a, b in (tie_lines or []):
         if a in hub_xy and b in hub_xy:
             ties.append((*hub_xy[a], *hub_xy[b]))
 
-    return {"hubs": hubs, "nodes": nodes, "spokes": spokes, "ties": ties}
+    return {"hubs": hubs, "nodes": nodes, "spokes": spokes, "ties": ties,
+            "loads": loads, "load_edges": load_edges}
 
 
 def _common_region(resources: list[FleetResource], zone: int) -> str:
