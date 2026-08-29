@@ -578,7 +578,7 @@ with col_cap:
         if not stor.empty:
             def _small_metric(col, label, value):
                 col.markdown(
-                    f"<div style='font-size:0.75rem;color:grey;margin-bottom:2px'>{label}</div>"
+                    f"<div style='font-size:0.75rem;color:grey;margin-bottom:1px'>{label}</div>"
                     f"<div style='font-size:0.95rem;font-weight:600'>{value}</div>",
                     unsafe_allow_html=True,
                 )
@@ -586,7 +586,7 @@ with col_cap:
             for _, row in stor.iterrows():
                 st.markdown(
                     f"<div style='font-weight:600;font-size:0.9rem;"
-                    f"margin:1.1rem 0 -0.15rem'>{row['Resource']}</div>",
+                    f"margin:1.0rem 0 0.1rem'>{row['Resource']}</div>",
                     unsafe_allow_html=True,
                 )
                 m1, m2, m3, m4, m5 = st.columns(5)
