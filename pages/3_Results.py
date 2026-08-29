@@ -584,7 +584,11 @@ with col_cap:
                 )
 
             for _, row in stor.iterrows():
-                st.caption(row["Resource"])
+                st.markdown(
+                    f"<div style='font-weight:600;font-size:0.9rem;"
+                    f"margin:0.6rem 0 -0.5rem'>{row['Resource']}</div>",
+                    unsafe_allow_html=True,
+                )
                 m1, m2, m3, m4, m5 = st.columns(5)
                 bat_discharge_power = row["EndCap"]
                 bat_charge_cap      = row.get("EndChargeCap", 0.0) or 0.0
