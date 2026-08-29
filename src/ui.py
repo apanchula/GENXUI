@@ -36,7 +36,7 @@ _CSS = """
     font-size: 1.7rem;
     font-weight: 700;
     line-height: 1.3;
-    padding: 1.2rem 0 0.35rem 0.5rem;
+    padding: 0.2rem 0 0.35rem 0.5rem;
 }
 </style>
 """
