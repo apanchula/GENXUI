@@ -7,7 +7,7 @@ _CSS = """
 /* Main content: clear the fixed toolbar, but far less than Streamlit's ~6rem. */
 .block-container,
 [data-testid="stMainBlockContainer"] {
-    padding-top: 3.5rem;
+    padding-top: 3rem;
     padding-bottom: 2rem;
 }
 /* Smaller page titles (st.title renders a chunky h1) — keep full line-height
@@ -15,7 +15,7 @@ _CSS = """
 [data-testid="stMainBlockContainer"] h1 {
     font-size: 1.7rem;
     line-height: 1.3;
-    padding-top: 0.4rem;
+    padding-top: 0.3rem;
     padding-bottom: 0.4rem;
 }
 /* Slightly tighter default spacing between stacked elements. */
@@ -25,17 +25,18 @@ _CSS = """
 [data-testid="stSidebar"] > div:first-child { padding-top: 0; }
 [data-testid="stSidebarHeader"] { padding-top: 0.25rem; padding-bottom: 0; min-height: 0; }
 [data-testid="stSidebarNav"] { padding-top: 0; margin-top: 0; }
-[data-testid="stSidebarNav"] ul { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+[data-testid="stSidebarNav"] ul { padding-top: 0.15rem; padding-bottom: 0.25rem; }
 [data-testid="stSidebarUserContent"] { padding-top: 0.5rem; }
 
-/* "GenXUI" brand — sits above the auto-generated page nav. */
+/* "GenXUI" brand — above the page nav, left-aligned with the nav links and
+   sitting at roughly the same height as the main page title. */
 [data-testid="stSidebarNav"]::before {
     content: "GenXUI";
     display: block;
     font-size: 1.7rem;
     font-weight: 700;
-    line-height: 1.2;
-    padding: 0.25rem 0 0.4rem 1.4rem;
+    line-height: 1.3;
+    padding: 1.2rem 0 0.35rem 0.5rem;
 }
 </style>
 """
