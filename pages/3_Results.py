@@ -70,14 +70,6 @@ with st.sidebar:
         results_dir = workspace.resolve_results_dir(case_path)
         inputs_dir = case_path
 
-    st.divider()
-    demand_mw = st.number_input(
-        "Peak demand (MW)",
-        value=100.0,
-        step=10.0,
-        help="Used to compute storage duration (MWh ÷ MW)",
-    )
-
     if not is_archived:
         st.divider()
         st.markdown("**Archive this run**")
@@ -593,7 +585,7 @@ with col_cap:
 
             for _, row in stor.iterrows():
                 st.caption(row["Resource"])
-                m1, m2, m3, m4, m5, m6 = st.columns(6)
+                m1, m2, m3, m4, m5 = st.columns(5)
                 bat_discharge_power = row["EndCap"]
                 bat_charge_cap      = row.get("EndChargeCap", 0.0) or 0.0
                 # Symmetric storage has no separate charge investment (EndChargeCap == 0),
@@ -602,12 +594,11 @@ with col_cap:
                 bat_energy = row["EndEnergyCap"]
                 bat_dur    = bat_energy / bat_discharge_power if bat_discharge_power > 0 else 0
                 bat_charge_time = bat_energy / bat_charge_power if bat_charge_power > 0 else 0
-                _small_metric(m1, "Demand Power",       f"{demand_mw:.0f} MW")
-                _small_metric(m2, "Discharge Power",    f"{bat_discharge_power:.1f} MW")
-                _small_metric(m3, "Charge Power",       f"{bat_charge_power:.1f} MW")
-                _small_metric(m4, "Battery Energy",     f"{bat_energy:.1f} MWh")
-                _small_metric(m5, "Battery Duration",   f"{bat_dur:.1f} h")
-                _small_metric(m6, "Min Charge Time",    f"{bat_charge_time:.1f} h")
+                _small_metric(m1, "Discharge Power",    f"{bat_discharge_power:.1f} MW")
+                _small_metric(m2, "Charge Power",       f"{bat_charge_power:.1f} MW")
+                _small_metric(m3, "Battery Energy",     f"{bat_energy:.1f} MWh")
+                _small_metric(m4, "Battery Duration",   f"{bat_dur:.1f} h")
+                _small_metric(m5, "Min Charge Time",    f"{bat_charge_time:.1f} h")
     else:
         st.warning("`capacity.csv` not found.")
 
