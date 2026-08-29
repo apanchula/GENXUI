@@ -21,22 +21,23 @@ _CSS = """
 /* Slightly tighter default spacing between stacked elements. */
 [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] { gap: 0.75rem; }
 
-/* Sidebar: raise everything toward the top. */
+/* Sidebar: raise everything toward the top, but keep room for the collapse
+   chevron that lives in stSidebarHeader. */
 [data-testid="stSidebar"] > div:first-child { padding-top: 0; }
-[data-testid="stSidebarHeader"] { padding-top: 0; padding-bottom: 0; min-height: 0; height: 0; }
+[data-testid="stSidebarHeader"] { padding-top: 0.4rem; padding-bottom: 0; }
 [data-testid="stSidebarNav"] { padding-top: 0; margin-top: 0; }
 [data-testid="stSidebarNav"] ul { padding-top: 0.15rem; padding-bottom: 0.25rem; }
 [data-testid="stSidebarUserContent"] { padding-top: 0.5rem; }
 
-/* "GenXUI" brand — above the page nav, left-aligned with the nav links and
-   sitting at roughly the same height as the main page title. */
+/* "GenXUI" brand — above the page nav, left-aligned with the nav links, just
+   below the header row (so the collapse chevron stays fully visible). */
 [data-testid="stSidebarNav"]::before {
     content: "GenXUI";
     display: block;
     font-size: 1.7rem;
     font-weight: 700;
     line-height: 1.3;
-    margin-top: -0.4rem;
+    margin-top: -0.3rem;
     padding: 0 0 0.35rem 0.5rem;
 }
 </style>
