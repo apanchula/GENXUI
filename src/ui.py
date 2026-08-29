@@ -29,15 +29,16 @@ _CSS = """
 [data-testid="stSidebarNav"] ul { padding-top: 0.15rem; padding-bottom: 0.25rem; }
 [data-testid="stSidebarUserContent"] { padding-top: 0.5rem; }
 
-/* "GenXUI" brand — above the page nav, left-aligned with the nav links, just
-   below the header row (so the collapse chevron stays fully visible). */
+/* "GenXUI" brand — pulled up onto the header row, sharing it with the
+   collapse chevron (chevron is right-aligned, this is left-aligned with the
+   nav links, so they don't collide). */
 [data-testid="stSidebarNav"]::before {
     content: "GenXUI";
     display: block;
     font-size: 1.7rem;
     font-weight: 700;
     line-height: 1.3;
-    margin-top: -0.3rem;
+    margin-top: -1.9rem;
     padding: 0 0 0.35rem 0.5rem;
 }
 </style>
