@@ -273,22 +273,37 @@ def _gen_to_load_map(rs: ResultSet) -> dict[str, float]:
 
 
 def supply_to_load(rs: ResultSet) -> pd.DataFrame:
-    """Zone, Type, GenToLoad_MWh — annual generation that actually served load,
-    per zone. A `System` pseudo-zone is appended when the case has >1 zone.
+    """Zone, Type, GenToLoad_MWh — annual energy that served load, per zone.
+    Includes an `Unserved` slice (non-served energy) so each zone's mix sums to
+    that zone's demand. A `System` pseudo-zone is appended when the case has
+    >1 zone.
     """
     m = _resource_master(rs)
     m = m[m["exists"]].copy()
-    if m.empty:
-        return pd.DataFrame(columns=["Zone", "Type", "GenToLoad_MWh"])
     gtl = _gen_to_load_map(rs)
-    m["GenToLoad_MWh"] = m["Resource"].map(lambda n: gtl.get(n, 0.0))
-    m = m[m["GenToLoad_MWh"] > 0]
+    if not m.empty:
+        m["GenToLoad_MWh"] = m["Resource"].map(lambda n: gtl.get(n, 0.0))
+        m = m[m["GenToLoad_MWh"] > 0]
+    df = (m.groupby(["Zone", "Type"], as_index=False)["GenToLoad_MWh"].sum()
+          if not m.empty else pd.DataFrame(columns=["Zone", "Type", "GenToLoad_MWh"]))
 
-    df = m.groupby(["Zone", "Type"], as_index=False)["GenToLoad_MWh"].sum()
+    nse_zone, nse_annual, _ = _wide_parts(rs.nse)
+    nse_by_zone: dict[int, float] = {}
+    for col, mwh in nse_annual.items():
+        if str(col).lower() == "total":
+            continue
+        z = nse_zone.get(col)
+        if z:
+            nse_by_zone[z] = nse_by_zone.get(z, 0.0) + max(0.0, _f(mwh))
+    nse_rows = [{"Zone": z, "Type": "Unserved", "GenToLoad_MWh": v}
+                for z, v in sorted(nse_by_zone.items()) if v > 0]
+    if nse_rows:
+        df = pd.concat([df, pd.DataFrame(nse_rows)], ignore_index=True)
+
     if df.empty:
         return df
     if rs.multi_zone:
-        sys_df = (df.groupby("Type", as_index=False)["GenToLoad_MWh"].sum())
+        sys_df = df.groupby("Type", as_index=False)["GenToLoad_MWh"].sum()
         sys_df.insert(0, "Zone", "System")
         df = pd.concat([df, sys_df], ignore_index=True)
     return df

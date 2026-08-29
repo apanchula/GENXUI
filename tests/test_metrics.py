@@ -168,6 +168,17 @@ def test_supply_to_load_nets_vre_charging_and_adds_system_row():
         assert abs(z1_stor - 500) < 1e-6
 
 
+def test_supply_to_load_includes_unserved_energy():
+    with tempfile.TemporaryDirectory() as t:
+        rs = metrics.load_results(_mz(Path(t)))
+        stl = metrics.supply_to_load(rs)
+        u1 = stl[(stl["Zone"] == 1) & (stl["Type"] == "Unserved")]["GenToLoad_MWh"]
+        u2 = stl[(stl["Zone"] == 2) & (stl["Type"] == "Unserved")]["GenToLoad_MWh"]
+        assert u1.iloc[0] == 120 and u2.iloc[0] == 80
+        usys = stl[(stl["Zone"] == "System") & (stl["Type"] == "Unserved")]["GenToLoad_MWh"]
+        assert usys.iloc[0] == 200
+
+
 # ── costs / nse / breakdown ────────────────────────────────────────────────
 
 def test_costs_components():
