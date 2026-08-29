@@ -133,21 +133,23 @@ if rs.dropped_resources:
 st.subheader("Key Metrics")
 
 _zs = metrics.zone_summary(rs)
-_comp = metrics.costs_components(rs)
-_total_row = _zs[_zs["is_total"]]
-_total_cap = float(_total_row["Capacity_MW"].iloc[0]) if not _total_row.empty else 0.0
-_total_gen = float(_total_row["Generation_MWh"].iloc[0]) if not _total_row.empty else 0.0
-_total_curt = float(_total_row["Curtailment_MWh"].iloc[0]) if not _total_row.empty else 0.0
-_nse_mwh = metrics.nse_total_mwh(rs)
 
-m1, m2, m3, m4, m5 = st.columns(5)
-m1.metric("System cost", f"${_comp.get('cTotal', 0.0) / 1e9:,.2f} B/yr" if _comp else "—")
-m2.metric("Built capacity", f"{_total_cap:,.0f} MW")
-m3.metric("Annual generation", f"{_total_gen / 1e6:,.1f} TWh")
-m4.metric("Curtailment", f"{_total_curt / 1e6:,.1f} TWh",
-          f"{100 * _total_curt / _total_gen:.1f}%" if _total_gen > 0 else None,
-          delta_color="off")
-m5.metric("Unserved energy", f"{_nse_mwh / 1e3:,.1f} GWh")
+# The 5-metric summary row is parked for now — not needed yet.
+# _comp = metrics.costs_components(rs)
+# _total_row = _zs[_zs["is_total"]]
+# _total_cap = float(_total_row["Capacity_MW"].iloc[0]) if not _total_row.empty else 0.0
+# _total_gen = float(_total_row["Generation_MWh"].iloc[0]) if not _total_row.empty else 0.0
+# _total_curt = float(_total_row["Curtailment_MWh"].iloc[0]) if not _total_row.empty else 0.0
+# _nse_mwh = metrics.nse_total_mwh(rs)
+#
+# m1, m2, m3, m4, m5 = st.columns(5)
+# m1.metric("System cost", f"${_comp.get('cTotal', 0.0) / 1e9:,.2f} B/yr" if _comp else "—")
+# m2.metric("Built capacity", f"{_total_cap:,.0f} MW")
+# m3.metric("Annual generation", f"{_total_gen / 1e6:,.1f} TWh")
+# m4.metric("Curtailment", f"{_total_curt / 1e6:,.1f} TWh",
+#           f"{100 * _total_curt / _total_gen:.1f}%" if _total_gen > 0 else None,
+#           delta_color="off")
+# m5.metric("Unserved energy", f"{_nse_mwh / 1e3:,.1f} GWh")
 
 # ── Levelized cost per asset ────────────────────────────────────────────────
 _lcoe = metrics.lcoe_by_resource(rs)
