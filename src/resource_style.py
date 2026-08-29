@@ -17,19 +17,37 @@ COLORS: dict[str, str] = {
 }
 
 
+def resource_type(name: str) -> str:
+    """Stable type label for a resource, inferred from keywords in its name.
+    One of: Thermal, Solar, Wind, Storage, LDS, Grid, Other."""
+    n = str(name).lower()
+    if any(k in n for k in ("gas", "ngcc", "natural_gas", "coal", "nuclear", "thermal",
+                            "biomass", "allam")):
+        return "Thermal"
+    if any(k in n for k in ("pv", "solar")):
+        return "Solar"
+    if "wind" in n:
+        return "Wind"
+    if "lds" in n:
+        return "LDS"
+    if any(k in n for k in ("battery", "stor", "storage")):
+        return "Storage"
+    if "grid" in n:
+        return "Grid"
+    return "Other"
+
+
+_TYPE_COLOR = {
+    "Thermal": COLORS["thermal"], "Solar": COLORS["solar"], "Wind": COLORS["wind"],
+    "Storage": COLORS["storage"], "LDS": COLORS["lds"], "Grid": COLORS["grid"],
+    "Other": COLORS["other"],
+}
+
+
 def resource_color(name: str) -> str:
     """Colour for a resource, inferred from keywords in its name."""
-    n = str(name).lower()
-    if any(k in n for k in ("gas", "ngcc", "natural_gas", "coal", "nuclear", "thermal")):
-        return COLORS["thermal"]
-    if any(k in n for k in ("pv", "solar")):
-        return COLORS["solar"]
-    if "wind" in n:
-        return COLORS["wind"]
-    if "lds" in n:
-        return COLORS["lds"]
-    if any(k in n for k in ("battery", "stor", "storage")):
-        return COLORS["storage"]
-    if "grid" in n:
-        return COLORS["grid"]
-    return COLORS["other"]
+    return _TYPE_COLOR[resource_type(name)]
+
+
+def type_color(type_label: str) -> str:
+    return _TYPE_COLOR.get(type_label, COLORS["other"])

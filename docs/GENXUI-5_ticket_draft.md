@@ -47,3 +47,40 @@ This is Phase 5 of `GENXUI-Refresh_Master.md` §5. GENXUI-1…4 modules are comp
 
 ### Est. Nights: 2–3
 *(New engine + a tested parser for ~6 CSV shapes + reworking the two summary sections and re-pointing five chart sections — and the current parsing has a lot of undocumented edge-case handling that has to be carried over deliberately, not dropped.)*
+
+---
+
+## Implementation status — done 2026-08-28
+
+All acceptance criteria met.
+
+- `src/metrics.py` (new, pure): `_wide_parts()` splits any wide GenX CSV into
+  (zone-of-col, annual-of-col, hour-indexed timeseries). `load_results()` →
+  `ResultSet` (raw frames + `zones` + `dropped_resources`). Accessors:
+  `capacity_by_resource`, `generation_by_resource`, `zone_summary`
+  (per-(Zone,Type) rows + `is_subtotal` per zone + `is_total`),
+  `supply_to_load` (per-zone `_gen_to_load` bookkeeping + a `System` row when
+  multi-zone), `cost_breakdown`, `costs_components`, `nse_summary`,
+  `nse_total_mwh`, `demand_total_mwh`, `nse/curtailment/power_timeseries`,
+  `charging_source` (the old `_compute_charging_source`, ported).
+- `src/resource_style.py`: `resource_type(name)` (Thermal/Solar/Wind/Storage/
+  LDS/Grid/Other) + `type_color()`; `resource_color()` now derives from it.
+- `pages/3_Results.py` rewritten (~930 → ~470 lines). Key Metrics = a
+  zone-grouped table (bold subtotals + SYSTEM TOTAL) + a 5-metric row + a
+  "Key metrics (CSV)" download. Supply to Load = one donut per zone + a System
+  donut when multi-zone + a "Supply mix (CSV)" download. The five chart
+  sections + Raw Data now read `metrics` accessors; no inline `== "AnnualSum"`
+  / `== "Total"` shape-probing remains (`grep` clean bar one display-total).
+  The dropped-resource count is captioned under the title.
+- `tests/test_metrics.py`: 13 cases (multi/single zone, ghost-resource drop,
+  missing optional CSV, zone summary, supply-to-load VRE-charging netting,
+  costs, NSE, breakdown, timeseries). 98 tests total, all green; AppTest clean
+  on all five pages for live and archived sources.
+
+**Deviations:** the old per-resource **LCOE table** (with its synthetic
+"Demand Response" / "Unserved Energy" rows and Total row) was replaced by the
+zone summary + cost-breakdown chart, not carried over — the ticket's redesign
+made it redundant and it was the most fragile parsing in the file. The HTML
+report's "Key Metrics" section now shows the zone summary (`report_lib`
+untouched — it just calls `.to_html()`). `archive_lib.compute_headline_metrics`
+left as-is (the stretch consolidation) — manifest schema unchanged.
