@@ -23,7 +23,7 @@ _CSS = """
 
 /* Sidebar: raise everything toward the top. */
 [data-testid="stSidebar"] > div:first-child { padding-top: 0; }
-[data-testid="stSidebarHeader"] { padding-top: 0.25rem; padding-bottom: 0; min-height: 0; }
+[data-testid="stSidebarHeader"] { padding-top: 0; padding-bottom: 0; min-height: 0; height: 0; }
 [data-testid="stSidebarNav"] { padding-top: 0; margin-top: 0; }
 [data-testid="stSidebarNav"] ul { padding-top: 0.15rem; padding-bottom: 0.25rem; }
 [data-testid="stSidebarUserContent"] { padding-top: 0.5rem; }
@@ -36,7 +36,8 @@ _CSS = """
     font-size: 1.7rem;
     font-weight: 700;
     line-height: 1.3;
-    padding: 0.2rem 0 0.35rem 0.5rem;
+    margin-top: -0.8rem;
+    padding: 0 0 0.35rem 0.5rem;
 }
 </style>
 """
