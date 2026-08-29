@@ -149,30 +149,64 @@ m4.metric("Curtailment", f"{_total_curt / 1e6:,.1f} TWh",
           delta_color="off")
 m5.metric("Unserved energy", f"{_nse_mwh / 1e3:,.1f} GWh")
 
-if _zs.empty:
-    st.caption("No resources with output in this run.")
+# ── Levelized cost per asset ────────────────────────────────────────────────
+_lcoe = metrics.lcoe_by_resource(rs)
+lcoe_styler = None
+if _lcoe.empty:
+    st.caption("`NetRevenue.csv` / `power.csv` needed for levelized cost.")
 else:
-    _disp = _zs.copy()
-    _disp["Capacity (MW)"] = _disp["Capacity_MW"].map(lambda v: f"{v:,.0f}")
-    _disp["Generation (GWh)"] = _disp["Generation_MWh"].map(lambda v: f"{v / 1e3:,.0f}")
-    _disp["Curtailment (GWh)"] = _disp["Curtailment_MWh"].map(
-        lambda v: f"{v / 1e3:,.0f}" if v > 0 else "")
-    _disp["Zone"] = _disp["Zone"].map(lambda z: "" if z == "" else f"Zone {z}")
-    _view = _disp[["Zone", "Type", "Capacity (MW)", "Generation (GWh)", "Curtailment (GWh)"]]
+    _lv = _lcoe.rename(columns={
+        "LCOE_$MWh": "LCOE ($/MWh)", "HardwareCost_$M": "Hardware Cost ($M/yr)",
+        "ChargeCost_$M": "Charging Cost ($M/yr)", "AnnualGen_GWh": "Annual Gen (GWh/yr)",
+        "GenToLoad_GWh": "Gen to Load (GWh/yr)", "Curtail_GWh": "Curtailment (GWh/yr)",
+        "CurtailPct": "Curtail %",
+    })
+    _lv["Zone"] = _lv["Zone"].map(lambda z: "" if z == "" else f"Zone {z}")
+    _cols = ["Resource", "Type", "Zone", "LCOE ($/MWh)", "Hardware Cost ($M/yr)",
+             "Charging Cost ($M/yr)", "Annual Gen (GWh/yr)", "Gen to Load (GWh/yr)",
+             "Curtailment (GWh/yr)", "Curtail %"]
+    _is_total = _lcoe["is_total"].tolist()
 
-    _flags = list(zip(_zs["is_subtotal"], _zs["is_total"]))
+    def _bold_total(_row):
+        return ["font-weight: bold" if _is_total[_row.name] else ""] * len(_row)
 
-    def _bold(_row):
-        sub, tot = _flags[_row.name]
-        return ["font-weight: bold" if (sub or tot) else ""] * len(_row)
-
-    st.dataframe(_view.style.apply(_bold, axis=1), hide_index=True, width="stretch")
-
-    _csv = _zs[["Zone", "Type", "Capacity_MW", "Generation_MWh", "Curtailment_MWh"]]
+    lcoe_styler = _lv[_cols].style.apply(_bold_total, axis=1).format({
+        "LCOE ($/MWh)": "${:.2f}", "Hardware Cost ($M/yr)": "${:.1f}",
+        "Charging Cost ($M/yr)": "${:.1f}", "Annual Gen (GWh/yr)": "{:,.0f}",
+        "Gen to Load (GWh/yr)": "{:,.0f}", "Curtailment (GWh/yr)": "{:,.0f}",
+        "Curtail %": "{:.1f}%",
+    }, na_rep="—")
+    st.dataframe(lcoe_styler, hide_index=True, width="stretch")
     st.download_button(
-        "⬇ Key metrics (CSV)", _csv.to_csv(index=False).encode(),
-        file_name=f"key_metrics_{case_name}.csv", mime="text/csv",
+        "⬇ Levelized cost (CSV)", _lcoe.drop(columns="is_total").to_csv(index=False).encode(),
+        file_name=f"lcoe_{case_name}.csv", mime="text/csv",
     )
+
+# ── Capacity & generation by zone ──────────────────────────────────────────
+_flags = list(zip(_zs["is_subtotal"], _zs["is_total"])) if not _zs.empty else []
+
+
+def _bold(_row):
+    sub, tot = _flags[_row.name]
+    return ["font-weight: bold" if (sub or tot) else ""] * len(_row)
+
+
+if not _zs.empty:
+    with st.expander("Capacity & generation by zone", expanded=rs.multi_zone):
+        _disp = _zs.copy()
+        _disp["Capacity (MW)"] = _disp["Capacity_MW"].map(lambda v: f"{v:,.0f}")
+        _disp["Generation (GWh)"] = _disp["Generation_MWh"].map(lambda v: f"{v / 1e3:,.0f}")
+        _disp["Curtailment (GWh)"] = _disp["Curtailment_MWh"].map(
+            lambda v: f"{v / 1e3:,.0f}" if v > 0 else "")
+        _disp["Zone"] = _disp["Zone"].map(lambda z: "" if z == "" else f"Zone {z}")
+        _view = _disp[["Zone", "Type", "Capacity (MW)", "Generation (GWh)", "Curtailment (GWh)"]]
+        st.dataframe(_view.style.apply(_bold, axis=1), hide_index=True, width="stretch")
+        st.download_button(
+            "⬇ Zone summary (CSV)",
+            _zs[["Zone", "Type", "Capacity_MW", "Generation_MWh", "Curtailment_MWh"]]
+            .to_csv(index=False).encode(),
+            file_name=f"zone_summary_{case_name}.csv", mime="text/csv",
+        )
 
 st.divider()
 
@@ -445,14 +479,10 @@ st.divider()
 # ── Export ──────────────────────────────────────────────────────────────────
 st.subheader("Export")
 
-_report_styler = None
-if not _zs.empty:
-    _report_styler = _view.style.apply(_bold, axis=1)
-
 _report_html = report_lib.build_results_html(
     case_label=case_name,
     generated_at=datetime.now(),
-    lcoe_styler=_report_styler,
+    lcoe_styler=lcoe_styler,
     cap_fig=cap_fig,
     pie_fig=pie_fig,
     nse_fig=nse_fig,

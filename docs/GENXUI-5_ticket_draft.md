@@ -77,10 +77,13 @@ All acceptance criteria met.
   costs, NSE, breakdown, timeseries). 98 tests total, all green; AppTest clean
   on all five pages for live and archived sources.
 
-**Deviations:** the old per-resource **LCOE table** (with its synthetic
-"Demand Response" / "Unserved Energy" rows and Total row) was replaced by the
-zone summary + cost-breakdown chart, not carried over — the ticket's redesign
-made it redundant and it was the most fragile parsing in the file. The HTML
-report's "Key Metrics" section now shows the zone summary (`report_lib`
-untouched — it just calls `.to_html()`). `archive_lib.compute_headline_metrics`
-left as-is (the stretch consolidation) — manifest schema unchanged.
+**Per-asset LCOE kept** (follow-up): the redesign initially dropped the
+per-resource levelized-cost table; it's back as `metrics.lcoe_by_resource(rs)`
+— Resource / Type / Zone / LCOE ($/MWh) / Hardware & Charging cost / Annual Gen
+/ Gen-to-Load / Curtailment / Curtail %, plus a bold TOTAL row — rendered as
+the first table in Key Metrics with its own CSV download; the zone summary
+moved into a "Capacity & generation by zone" expander below it. The synthetic
+"Demand Response" / "Unserved Energy" pseudo-rows from the old table were not
+carried over (they aren't assets). The HTML report's Key Metrics section shows
+this LCOE table (`report_lib` untouched — it just calls `.to_html()`).
+`archive_lib.compute_headline_metrics` left as-is — manifest schema unchanged.

@@ -241,50 +241,123 @@ def zone_summary(rs: ResultSet) -> pd.DataFrame:
     return pd.concat(out_rows, ignore_index=True)
 
 
-# ── supply to load ─────────────────────────────────────────────────────────
+# ── gen-to-load / supply to load / LCOE ────────────────────────────────────
+
+def _gen_to_load_map(rs: ResultSet) -> dict[str, float]:
+    """{resource -> MWh that actually served load}. Storage discharge counts
+    fully; each VRE resource has its zone-proportional share of storage charging
+    netted out (mirrors the old `_gen_to_load`)."""
+    m = _resource_master(rs)
+    m = m[m["exists"]].copy()
+    if m.empty:
+        return {}
+    _, charge_of, _ = _wide_parts(rs.charge)
+    m["charge"] = m["Resource"].map(lambda n: max(0.0, charge_of.get(n, 0.0)))
+    storage_names = set(m.loc[m["charge"] > 0, "Resource"])
+
+    out: dict[str, float] = {}
+    for z in m["Zone"].unique():
+        zm = m[m["Zone"] == z]
+        total_charge = zm["charge"].sum()
+        vre_total = zm.loc[zm["Type"].isin(["Solar", "Wind"]), "AnnualGen_MWh"].sum()
+        for _, r in zm.iterrows():
+            g = r["AnnualGen_MWh"]
+            if r["Resource"] in storage_names:
+                out[r["Resource"]] = g
+            elif r["Type"] in ("Solar", "Wind"):
+                share = g / vre_total if vre_total > 0 else 0.0
+                out[r["Resource"]] = max(0.0, g - total_charge * share)
+            else:
+                out[r["Resource"]] = g
+    return out
+
 
 def supply_to_load(rs: ResultSet) -> pd.DataFrame:
     """Zone, Type, GenToLoad_MWh — annual generation that actually served load,
-    per zone. Storage discharge counts fully; VRE has its share of storage
-    charging netted out (mirrors the old `_gen_to_load`). A `System` pseudo-zone
-    is appended when the case has >1 zone.
+    per zone. A `System` pseudo-zone is appended when the case has >1 zone.
     """
     m = _resource_master(rs)
     m = m[m["exists"]].copy()
     if m.empty:
         return pd.DataFrame(columns=["Zone", "Type", "GenToLoad_MWh"])
+    gtl = _gen_to_load_map(rs)
+    m["GenToLoad_MWh"] = m["Resource"].map(lambda n: gtl.get(n, 0.0))
+    m = m[m["GenToLoad_MWh"] > 0]
 
-    _, charge_of, _ = _wide_parts(rs.charge)
-    m["charge"] = m["Resource"].map(lambda n: max(0.0, charge_of.get(n, 0.0)))
-    storage_names = set(m.loc[m["charge"] > 0, "Resource"])
-
-    rows = []
-    for z in sorted(m["Zone"].unique()):
-        zm = m[m["Zone"] == z]
-        total_charge = zm["charge"].sum()
-        vre_mask = zm["Type"].isin(["Solar", "Wind"])
-        vre_total = zm.loc[vre_mask, "AnnualGen_MWh"].sum()
-        for _, r in zm.iterrows():
-            g = r["AnnualGen_MWh"]
-            if r["Resource"] in storage_names:
-                gtl = g
-            elif r["Type"] in ("Solar", "Wind"):
-                share = g / vre_total if vre_total > 0 else 0.0
-                gtl = max(0.0, g - total_charge * share)
-            else:
-                gtl = g
-            if gtl > 0:
-                rows.append({"Zone": z, "Type": r["Type"], "GenToLoad_MWh": gtl})
-
-    df = pd.DataFrame(rows)
+    df = m.groupby(["Zone", "Type"], as_index=False)["GenToLoad_MWh"].sum()
     if df.empty:
         return df
-    df = df.groupby(["Zone", "Type"], as_index=False)["GenToLoad_MWh"].sum()
     if rs.multi_zone:
         sys_df = (df.groupby("Type", as_index=False)["GenToLoad_MWh"].sum())
         sys_df.insert(0, "Zone", "System")
         df = pd.concat([df, sys_df], ignore_index=True)
     return df
+
+
+def lcoe_by_resource(rs: ResultSet) -> pd.DataFrame:
+    """Per-asset levelized cost and generation accounting, plus a TOTAL row.
+
+    Columns: Resource, Type, Zone, LCOE_$MWh, HardwareCost_$M, ChargeCost_$M,
+             AnnualGen_GWh, GenToLoad_GWh, Curtail_GWh, CurtailPct, is_total.
+
+    LCOE = total annualised cost (NetRevenue.csv `Cost`) / annual dispatch.
+    HardwareCost = Cost − Charge_cost. AnnualGen = dispatch + curtailment.
+    """
+    cols = ["Resource", "Type", "Zone", "LCOE_$MWh", "HardwareCost_$M",
+            "ChargeCost_$M", "AnnualGen_GWh", "GenToLoad_GWh", "Curtail_GWh",
+            "CurtailPct", "is_total"]
+    m = _resource_master(rs)
+    m = m[m["exists"]].copy()
+    if m.empty:
+        return pd.DataFrame(columns=cols)
+
+    rev = rs.net_revenue
+    cost_of: dict[str, float] = {}
+    charge_cost_of: dict[str, float] = {}
+    if rev is not None and "Resource" in rev.columns:
+        for _, r in rev.iterrows():
+            n = str(r["Resource"]).strip()
+            if n.lower() == "total":
+                continue
+            cost_of[n] = _f(r.get("Cost"))
+            charge_cost_of[n] = _f(r.get("Charge_cost"))
+
+    gtl = _gen_to_load_map(rs)
+    rows = []
+    for _, r in m.iterrows():
+        n = r["Resource"]
+        gen = r["AnnualGen_MWh"]
+        curt = r["Curtail_MWh"]
+        cost = cost_of.get(n, 0.0)
+        ccost = charge_cost_of.get(n, 0.0)
+        potential = gen + curt
+        rows.append({
+            "Resource": n, "Type": r["Type"], "Zone": int(r["Zone"]),
+            "LCOE_$MWh": (cost / gen) if gen > 0 else None,
+            "HardwareCost_$M": (cost - ccost) / 1e6,
+            "ChargeCost_$M": (ccost / 1e6) if ccost > 0 else None,
+            "AnnualGen_GWh": potential / 1e3,
+            "GenToLoad_GWh": gtl.get(n, gen) / 1e3,
+            "Curtail_GWh": curt / 1e3,
+            "CurtailPct": (100 * curt / potential) if potential > 0 else None,
+            "is_total": False,
+        })
+    df = pd.DataFrame(rows)
+
+    tot_cost = sum(cost_of.get(n, 0.0) for n in df["Resource"])
+    tot_gtl = df["GenToLoad_GWh"].sum() * 1e3
+    df = pd.concat([df, pd.DataFrame([{
+        "Resource": "TOTAL", "Type": "", "Zone": "",
+        "LCOE_$MWh": (tot_cost / tot_gtl) if tot_gtl > 0 else None,
+        "HardwareCost_$M": df["HardwareCost_$M"].sum(),
+        "ChargeCost_$M": df["ChargeCost_$M"].sum(skipna=True) or None,
+        "AnnualGen_GWh": df["AnnualGen_GWh"].sum(),
+        "GenToLoad_GWh": df["GenToLoad_GWh"].sum(),
+        "Curtail_GWh": df["Curtail_GWh"].sum(),
+        "CurtailPct": None,
+        "is_total": True,
+    }])], ignore_index=True)
+    return df[cols]
 
 
 # ── costs / NSE ────────────────────────────────────────────────────────────

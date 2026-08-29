@@ -193,6 +193,20 @@ def test_cost_breakdown_columns():
         assert "z2_wind" in cb.index and "Total" not in cb.index
 
 
+def test_lcoe_by_resource():
+    with tempfile.TemporaryDirectory() as t:
+        rs = metrics.load_results(_mz(Path(t)))
+        lc = metrics.lcoe_by_resource(rs)
+        row = lc.set_index("Resource").loc["z1_gas"]
+        # Cost 1.61e6 / dispatch 1000 MWh
+        assert abs(row["LCOE_$MWh"] - 1610.0) < 1e-6
+        assert row["is_total"] is False or row["is_total"] == False  # noqa: E712
+        tot = lc[lc["is_total"]].iloc[0]
+        assert tot["Resource"] == "TOTAL" and tot["LCOE_$MWh"] is not None
+        # ghost resource excluded
+        assert "z2_ghost" not in lc["Resource"].tolist()
+
+
 # ── timeseries ─────────────────────────────────────────────────────────────
 
 def test_timeseries_accessors_indexed_by_hour():
