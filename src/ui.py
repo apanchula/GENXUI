@@ -4,18 +4,22 @@ import streamlit as st
 
 _CSS = """
 <style>
-/* Main content: clear the fixed toolbar, but far less than Streamlit's ~6rem. */
+/* Transparent toolbar so the page title can sit at the same height as the
+   sidebar "GenXUI" without being hidden (the toolbar buttons stay on the far
+   right, clear of the left-aligned title). */
+[data-testid="stHeader"] { background: transparent; }
+
+/* Main content pulled right up. */
 .block-container,
 [data-testid="stMainBlockContainer"] {
-    padding-top: 3rem;
+    padding-top: 1.1rem;
     padding-bottom: 2rem;
 }
-/* Smaller page titles (st.title renders a chunky h1) — keep full line-height
-   and a little top padding so nothing clips. */
+/* Smaller page titles (st.title renders a chunky h1). */
 [data-testid="stMainBlockContainer"] h1 {
     font-size: 1.7rem;
     line-height: 1.3;
-    padding-top: 0.3rem;
+    padding-top: 0;
     padding-bottom: 0.4rem;
 }
 /* Slightly tighter default spacing between stacked elements. */
