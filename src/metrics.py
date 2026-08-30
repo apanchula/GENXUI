@@ -453,15 +453,6 @@ def nse_total_mwh(rs: ResultSet) -> float:
     return sum(_f(v) for k, v in annual_of.items() if str(k).lower() != "total")
 
 
-def demand_total_mwh(rs: ResultSet) -> float:
-    zone_of, annual_of, _ = _wide_parts(rs.power_balance)
-    total = 0.0
-    for col, v in annual_of.items():
-        if str(col).split(".")[0] == "Demand":
-            total += abs(_f(v))
-    return total
-
-
 # ── timeseries accessors (chart sections) ──────────────────────────────────
 
 def nse_timeseries(rs: ResultSet) -> pd.Series:

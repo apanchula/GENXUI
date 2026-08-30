@@ -132,6 +132,12 @@ if rs.dropped_resources:
 # ── Section 1: Key Metrics (zone-aware) ──────────────────────────────────────
 st.subheader("Key Metrics")
 
+
+def _bold_where(flags):
+    """A pandas Styler row func: bold the rows where `flags[row.name]` is truthy."""
+    return lambda row: ["font-weight: bold" if flags[row.name] else ""] * len(row)
+
+
 _zs = metrics.zone_summary(rs)
 
 # The 5-metric summary row is parked for now — not needed yet.
@@ -157,11 +163,7 @@ lcoe_styler = None
 if _am.empty:
     st.caption("`NetRevenue.csv` / `power.csv` needed for the asset tables.")
 else:
-    _is_total = _am["is_total"].tolist()
-
-    def _bold_total(_row):
-        return ["font-weight: bold" if _is_total[_row.name] else ""] * len(_row)
-
+    _bold_total = _bold_where(_am["is_total"].tolist())
     _zone_lbl = _am["Zone"].map(lambda z: "" if z == "" else f"Zone {z}")
 
     # Table 1 — Energy (GWh/yr)
@@ -233,15 +235,8 @@ else:
         )
 
 # ── Capacity & generation by zone ──────────────────────────────────────────
-_flags = list(zip(_zs["is_subtotal"], _zs["is_total"])) if not _zs.empty else []
-
-
-def _bold(_row):
-    sub, tot = _flags[_row.name]
-    return ["font-weight: bold" if (sub or tot) else ""] * len(_row)
-
-
 if not _zs.empty:
+    _bold = _bold_where((_zs["is_subtotal"] | _zs["is_total"]).tolist())
     with st.expander("Capacity & generation by zone", expanded=rs.multi_zone):
         _disp = _zs.copy()
         _disp["Capacity (MW)"] = _disp["Capacity_MW"].map(lambda v: f"{v:,.0f}")

@@ -8,6 +8,7 @@ import streamlit as st
 
 import archive_lib
 from src import examples, run_diagnosis, run_preview, run_settings, ui, workspace
+from src.fleet_view import RESOURCE_FILES as _RESOURCE_FILES
 
 st.set_page_config(page_title="GenX UI", layout="wide")
 ui.compact_layout()
@@ -141,12 +142,8 @@ def _render_run_preview(case_path: Path) -> None:
 
 
 # ── System summary helpers ────────────────────────────────────────────────────
-_RESOURCE_FILES = {
-    "Thermal.csv":  "Thermal",
-    "Vre.csv":      "VRE",
-    "Storage.csv":  "Storage",
-    "Vre_stor.csv": "VRE+Storage",
-}
+# resource file → type label comes from src.fleet_view.RESOURCE_FILES (imported
+# as _RESOURCE_FILES above); _build_summary only adds Notes for a few of them.
 
 
 @st.cache_data
