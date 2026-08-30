@@ -151,37 +151,67 @@ _zs = metrics.zone_summary(rs)
 #           delta_color="off")
 # m5.metric("Unserved energy", f"{_nse_mwh / 1e3:,.1f} GWh")
 
-# ── Levelized cost per asset ────────────────────────────────────────────────
-_lcoe = metrics.lcoe_by_resource(rs)
+# ── Per-asset energy & cost tables ─────────────────────────────────────────
+_am = metrics.asset_metrics(rs)
 lcoe_styler = None
-if _lcoe.empty:
-    st.caption("`NetRevenue.csv` / `power.csv` needed for levelized cost.")
+if _am.empty:
+    st.caption("`NetRevenue.csv` / `power.csv` needed for the asset tables.")
 else:
-    _lv = _lcoe.rename(columns={
-        "LCOE_$MWh": "LCOE ($/MWh)", "HardwareCost_$M": "Hardware Cost ($M/yr)",
-        "ChargeCost_$M": "Charging Cost ($M/yr)", "AnnualGen_GWh": "Annual Gen (GWh/yr)",
-        "GenToLoad_GWh": "Gen to Load (GWh/yr)", "Curtail_GWh": "Curtailment (GWh/yr)",
-        "CurtailPct": "Curtail %",
-    })
-    _lv["Zone"] = _lv["Zone"].map(lambda z: "" if z == "" else f"Zone {z}")
-    _cols = ["Resource", "Type", "Zone", "LCOE ($/MWh)", "Hardware Cost ($M/yr)",
-             "Charging Cost ($M/yr)", "Annual Gen (GWh/yr)", "Gen to Load (GWh/yr)",
-             "Curtailment (GWh/yr)", "Curtail %"]
-    _is_total = _lcoe["is_total"].tolist()
+    _is_total = _am["is_total"].tolist()
 
     def _bold_total(_row):
         return ["font-weight: bold" if _is_total[_row.name] else ""] * len(_row)
 
-    lcoe_styler = _lv[_cols].style.apply(_bold_total, axis=1).format({
-        "LCOE ($/MWh)": "${:.2f}", "Hardware Cost ($M/yr)": "${:.1f}",
-        "Charging Cost ($M/yr)": "${:.1f}", "Annual Gen (GWh/yr)": "{:,.0f}",
-        "Gen to Load (GWh/yr)": "{:,.0f}", "Curtailment (GWh/yr)": "{:,.0f}",
-        "Curtail %": "{:.1f}%",
+    _zone_lbl = _am["Zone"].map(lambda z: "" if z == "" else f"Zone {z}")
+
+    # Table 1 — Energy (GWh/yr)
+    _e = pd.DataFrame({
+        "Resource": _am["Resource"], "Type": _am["Type"], "Zone": _zone_lbl,
+        "Annual Generation (GWh)": _am["AnnualGen_MWh"] / 1e3,
+        "Energy to Load (GWh)": _am["EnergyToLoad_MWh"] / 1e3,
+        "Curtailment (GWh)": _am["Curtail_MWh"] / 1e3,
+        "Energy to Charge (GWh)": _am["EnergyToCharge_MWh"] / 1e3,
+    })
+    st.markdown("**Energy**")
+    st.dataframe(
+        _e.style.apply(_bold_total, axis=1).format(
+            {c: "{:,.0f}" for c in _e.columns[3:]}, na_rep="—"),
+        hide_index=True, width="stretch",
+    )
+    st.download_button(
+        "⬇ Energy (CSV)",
+        _am[["Resource", "Type", "Zone", "AnnualGen_MWh", "EnergyToLoad_MWh",
+             "Curtail_MWh", "EnergyToCharge_MWh"]].to_csv(index=False).encode(),
+        file_name=f"energy_{case_name}.csv", mime="text/csv",
+    )
+
+    # Table 2 — LCOE & costs ($M/yr)
+    _c = pd.DataFrame({
+        "Resource": _am["Resource"], "Type": _am["Type"], "Zone": _zone_lbl,
+        "LCOE ($/MWh)": _am["LCOE_$MWh"],
+        "CapEx – Power ($M/yr)": _am["CapExPower_$"] / 1e6,
+        "CapEx – Energy ($M/yr)": _am["CapExEnergy_$"] / 1e6,
+        "OpEx ($M/yr)": _am["OpEx_$"] / 1e6,
+        "Emissions ($M/yr)": _am["Emissions_$"] / 1e6,
+        "Charge Cost ($M/yr)": _am["ChargeCost_$"] / 1e6,
+    })
+    lcoe_styler = _c.style.apply(_bold_total, axis=1).format({
+        "LCOE ($/MWh)": "${:,.2f}", "CapEx – Power ($M/yr)": "${:,.1f}",
+        "CapEx – Energy ($M/yr)": "${:,.1f}", "OpEx ($M/yr)": "${:,.1f}",
+        "Emissions ($M/yr)": "${:,.1f}", "Charge Cost ($M/yr)": "${:,.1f}",
     }, na_rep="—")
+    st.markdown("**LCOE & costs**")
     st.dataframe(lcoe_styler, hide_index=True, width="stretch")
     st.download_button(
-        "⬇ Levelized cost (CSV)", _lcoe.drop(columns="is_total").to_csv(index=False).encode(),
-        file_name=f"lcoe_{case_name}.csv", mime="text/csv",
+        "⬇ LCOE & costs (CSV)",
+        _am[["Resource", "Type", "Zone", "LCOE_$MWh", "CapExPower_$", "CapExEnergy_$",
+             "OpEx_$", "Emissions_$", "ChargeCost_$"]].to_csv(index=False).encode(),
+        file_name=f"costs_{case_name}.csv", mime="text/csv",
+    )
+    st.caption(
+        "LCOE = total annualised cost ÷ dispatch (per asset); the TOTAL row is "
+        "system cost ÷ energy served to load. Cost columns sum to the LCOE "
+        "numerator: CapEx + OpEx (O&M · fuel · start) + Emissions + Charge cost."
     )
 
 # ── Capacity & generation by zone ──────────────────────────────────────────

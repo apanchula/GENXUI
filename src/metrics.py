@@ -309,69 +309,82 @@ def supply_to_load(rs: ResultSet) -> pd.DataFrame:
     return df
 
 
-def lcoe_by_resource(rs: ResultSet) -> pd.DataFrame:
-    """Per-asset levelized cost and generation accounting, plus a TOTAL row.
+# NetRevenue.csv cost columns, grouped. Their sum is the `Cost` column, and
+# `LCOE × dispatch == CapExPower + CapExEnergy + OpEx + Emissions + ChargeCost`.
+_CAPEX_POWER = ("Inv_cost_MW", "Inv_cost_charge_MW")
+_CAPEX_ENERGY = ("Inv_cost_MWh",)
+_OPEX = ("Fixed_OM_cost_MW", "Fixed_OM_cost_MWh", "Fixed_OM_cost_charge_MW",
+         "Var_OM_cost_out", "Var_OM_cost_in", "Fuel_cost", "StartCost",
+         "CO2SequestrationCost")
+_EMISSIONS = ("EmissionsCost",)
+_CHARGECOST = ("Charge_cost",)
 
-    Columns: Resource, Type, Zone, LCOE_$MWh, HardwareCost_$M, ChargeCost_$M,
-             AnnualGen_GWh, GenToLoad_GWh, Curtail_GWh, CurtailPct, is_total.
 
-    LCOE = total annualised cost (NetRevenue.csv `Cost`) / annual dispatch.
-    HardwareCost = Cost − Charge_cost. AnnualGen = dispatch + curtailment.
+def asset_metrics(rs: ResultSet) -> pd.DataFrame:
+    """One row per asset (+ a TOTAL row) with the energy and cost accounting the
+    Results page splits into its two tables.
+
+    Energy columns (MWh/yr): AnnualGen (dispatch), EnergyToLoad, Curtail,
+    EnergyToCharge.
+    Cost columns ($/yr): CapExPower, CapExEnergy, OpEx, Emissions, ChargeCost —
+    their sum is NetRevenue.csv's `Cost`.
+    LCOE_$MWh = Cost / dispatch per asset; the TOTAL row is Σcost / Σenergy-to-load.
     """
-    cols = ["Resource", "Type", "Zone", "LCOE_$MWh", "HardwareCost_$M",
-            "ChargeCost_$M", "AnnualGen_GWh", "GenToLoad_GWh", "Curtail_GWh",
-            "CurtailPct", "is_total"]
+    cols = ["Resource", "Type", "Zone", "AnnualGen_MWh", "EnergyToLoad_MWh",
+            "Curtail_MWh", "EnergyToCharge_MWh", "LCOE_$MWh", "CapExPower_$",
+            "CapExEnergy_$", "OpEx_$", "Emissions_$", "ChargeCost_$", "is_total"]
     m = _resource_master(rs)
     m = m[m["exists"]].copy()
     if m.empty:
         return pd.DataFrame(columns=cols)
 
     rev = rs.net_revenue
-    cost_of: dict[str, float] = {}
-    charge_cost_of: dict[str, float] = {}
+    rev_of: dict[str, pd.Series] = {}
     if rev is not None and "Resource" in rev.columns:
         for _, r in rev.iterrows():
             n = str(r["Resource"]).strip()
-            if n.lower() == "total":
-                continue
-            cost_of[n] = _f(r.get("Cost"))
-            charge_cost_of[n] = _f(r.get("Charge_cost"))
+            if n.lower() != "total":
+                rev_of[n] = r
 
+    def _grp(row, names):
+        return sum(_f(row.get(c)) for c in names) if row is not None else 0.0
+
+    _, charge_of, _ = _wide_parts(rs.charge)
     gtl = _gen_to_load_map(rs)
+
     rows = []
     for _, r in m.iterrows():
         n = r["Resource"]
+        rr = rev_of.get(n)
         gen = r["AnnualGen_MWh"]
-        curt = r["Curtail_MWh"]
-        cost = cost_of.get(n, 0.0)
-        ccost = charge_cost_of.get(n, 0.0)
-        potential = gen + curt
+        cost = _f(rr.get("Cost")) if rr is not None else (
+            _grp(rr, _CAPEX_POWER) + _grp(rr, _CAPEX_ENERGY) + _grp(rr, _OPEX)
+            + _grp(rr, _EMISSIONS) + _grp(rr, _CHARGECOST))
         rows.append({
             "Resource": n, "Type": r["Type"], "Zone": int(r["Zone"]),
+            "AnnualGen_MWh": gen,
+            "EnergyToLoad_MWh": gtl.get(n, gen),
+            "Curtail_MWh": r["Curtail_MWh"],
+            "EnergyToCharge_MWh": max(0.0, charge_of.get(n, 0.0)),
             "LCOE_$MWh": (cost / gen) if gen > 0 else None,
-            "HardwareCost_$M": (cost - ccost) / 1e6,
-            "ChargeCost_$M": (ccost / 1e6) if ccost > 0 else None,
-            "AnnualGen_GWh": potential / 1e3,
-            "GenToLoad_GWh": gtl.get(n, gen) / 1e3,
-            "Curtail_GWh": curt / 1e3,
-            "CurtailPct": (100 * curt / potential) if potential > 0 else None,
+            "CapExPower_$": _grp(rr, _CAPEX_POWER),
+            "CapExEnergy_$": _grp(rr, _CAPEX_ENERGY),
+            "OpEx_$": _grp(rr, _OPEX),
+            "Emissions_$": _grp(rr, _EMISSIONS),
+            "ChargeCost_$": _grp(rr, _CHARGECOST),
             "is_total": False,
         })
     df = pd.DataFrame(rows)
 
-    tot_cost = sum(cost_of.get(n, 0.0) for n in df["Resource"])
-    tot_gtl = df["GenToLoad_GWh"].sum() * 1e3
-    df = pd.concat([df, pd.DataFrame([{
-        "Resource": "TOTAL", "Type": "", "Zone": "",
-        "LCOE_$MWh": (tot_cost / tot_gtl) if tot_gtl > 0 else None,
-        "HardwareCost_$M": df["HardwareCost_$M"].sum(),
-        "ChargeCost_$M": df["ChargeCost_$M"].sum(skipna=True) or None,
-        "AnnualGen_GWh": df["AnnualGen_GWh"].sum(),
-        "GenToLoad_GWh": df["GenToLoad_GWh"].sum(),
-        "Curtail_GWh": df["Curtail_GWh"].sum(),
-        "CurtailPct": None,
-        "is_total": True,
-    }])], ignore_index=True)
+    _cost_cols = ["CapExPower_$", "CapExEnergy_$", "OpEx_$", "Emissions_$", "ChargeCost_$"]
+    tot_cost = df[_cost_cols].sum().sum()
+    tot_e2l = df["EnergyToLoad_MWh"].sum()
+    total = {"Resource": "TOTAL", "Type": "", "Zone": "", "is_total": True,
+             "LCOE_$MWh": (tot_cost / tot_e2l) if tot_e2l > 0 else None}
+    for c in ["AnnualGen_MWh", "EnergyToLoad_MWh", "Curtail_MWh",
+              "EnergyToCharge_MWh", *_cost_cols]:
+        total[c] = df[c].sum()
+    df = pd.concat([df, pd.DataFrame([total])], ignore_index=True)
     return df[cols]
 
 

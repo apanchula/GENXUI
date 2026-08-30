@@ -204,18 +204,26 @@ def test_cost_breakdown_columns():
         assert "z2_wind" in cb.index and "Total" not in cb.index
 
 
-def test_lcoe_by_resource():
+def test_asset_metrics_energy_and_cost_split():
     with tempfile.TemporaryDirectory() as t:
         rs = metrics.load_results(_mz(Path(t)))
-        lc = metrics.lcoe_by_resource(rs)
-        row = lc.set_index("Resource").loc["z1_gas"]
-        # Cost 1.61e6 / dispatch 1000 MWh
-        assert abs(row["LCOE_$MWh"] - 1610.0) < 1e-6
-        assert row["is_total"] is False or row["is_total"] == False  # noqa: E712
-        tot = lc[lc["is_total"]].iloc[0]
+        am = metrics.asset_metrics(rs).set_index("Resource")
+
+        gas = am.loc["z1_gas"]
+        # cost columns sum to the LCOE numerator (LCOE × dispatch)
+        comp = gas[["CapExPower_$", "CapExEnergy_$", "OpEx_$", "Emissions_$", "ChargeCost_$"]].sum()
+        assert abs(comp - gas["LCOE_$MWh"] * gas["AnnualGen_MWh"]) < 1e-3
+        assert abs(gas["CapExPower_$"] - 1e6) < 1e-6           # Inv_cost_MW
+        assert abs(gas["OpEx_$"] - (2e5 + 1e5 + 3e5 + 1e4)) < 1e-6  # FixedOM+VarOM+Fuel+Start
+
+        batt = am.loc["z1_battery"]
+        assert abs(batt["EnergyToCharge_MWh"] - 600) < 1e-6    # charge.csv AnnualSum
+        assert batt["ChargeCost_$"] == 0.0                      # not in this NetRevenue fixture
+
+        assert "z2_ghost" not in am.index
+        tot = metrics.asset_metrics(rs)
+        tot = tot[tot["is_total"]].iloc[0]
         assert tot["Resource"] == "TOTAL" and tot["LCOE_$MWh"] is not None
-        # ghost resource excluded
-        assert "z2_ghost" not in lc["Resource"].tolist()
 
 
 # ── timeseries ─────────────────────────────────────────────────────────────
