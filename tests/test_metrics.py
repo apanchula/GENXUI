@@ -221,9 +221,14 @@ def test_asset_metrics_energy_and_cost_split():
         assert batt["ChargeCost_$"] == 0.0                      # not in this NetRevenue fixture
 
         assert "z2_ghost" not in am.index
-        tot = metrics.asset_metrics(rs)
-        tot = tot[tot["is_total"]].iloc[0]
-        assert tot["Resource"] == "TOTAL" and tot["LCOE_$MWh"] is not None
+        full = metrics.asset_metrics(rs)
+        tot = full[full["is_total"]].iloc[0]
+        assert tot["Resource"] == "System"
+        # System LCOE is cost / energy-served-to-load (option B basis)
+        cost_cols = ["CapExPower_$", "CapExEnergy_$", "OpEx_$", "Emissions_$", "ChargeCost_$"]
+        expect = full.loc[~full["is_total"], cost_cols].sum().sum() / \
+            full.loc[~full["is_total"], "EnergyToLoad_MWh"].sum()
+        assert abs(tot["LCOE_$MWh"] - expect) < 1e-6
 
 
 # ── timeseries ─────────────────────────────────────────────────────────────

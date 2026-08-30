@@ -208,11 +208,29 @@ else:
              "OpEx_$", "Emissions_$", "ChargeCost_$"]].to_csv(index=False).encode(),
         file_name=f"costs_{case_name}.csv", mime="text/csv",
     )
-    st.caption(
-        "LCOE = total annualised cost ÷ dispatch (per asset); the TOTAL row is "
-        "system cost ÷ energy served to load. Cost columns sum to the LCOE "
-        "numerator: CapEx + OpEx (O&M · fuel · start) + Emissions + Charge cost."
-    )
+
+    with st.expander("ℹ️ How LCOE is computed"):
+        st.markdown(
+            "**Per-asset LCOE** = the asset's total annualised cost ÷ the energy it "
+            "**generated** (its dispatch). This is the standard LCOE definition "
+            "(Lazard / NREL / EIA).\n\n"
+            "- **Curtailed energy is not in the denominator.** Capacity was built and "
+            "paid for to produce it, but it delivered nothing — so curtailment "
+            "correctly raises an asset's LCOE. The **Energy** table shows how much "
+            "was curtailed.\n"
+            "- The five cost columns sum exactly to the LCOE numerator. "
+            "**OpEx** = fixed + variable O&M + fuel + start-up + CO₂ sequestration. "
+            "**Emissions** = CO₂ price × tons emitted — for a carbon-priced thermal "
+            "plant this can be the majority of its LCOE.\n"
+            "- **Storage** LCOE = its cost ÷ its discharge; the energy it bought to "
+            "charge is the **Charge Cost** column (and **Energy to Charge** in the "
+            "Energy table).\n\n"
+            "**The `System` row is a different metric** — total system cost ÷ total "
+            "energy **served to load** (`Energy to Load`), not raw generation. "
+            "Dividing by demand-served avoids double-counting the solar → battery → "
+            "load path, so it answers \"what did a delivered MWh cost the system?\". "
+            "Don't compare it directly against the per-asset LCOEs."
+        )
 
 # ── Capacity & generation by zone ──────────────────────────────────────────
 _flags = list(zip(_zs["is_subtotal"], _zs["is_total"])) if not _zs.empty else []

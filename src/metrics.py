@@ -328,7 +328,11 @@ def asset_metrics(rs: ResultSet) -> pd.DataFrame:
     EnergyToCharge.
     Cost columns ($/yr): CapExPower, CapExEnergy, OpEx, Emissions, ChargeCost —
     their sum is NetRevenue.csv's `Cost`.
-    LCOE_$MWh = Cost / dispatch per asset; the TOTAL row is Σcost / Σenergy-to-load.
+
+    LCOE_$MWh: per asset = Cost / generation (dispatch — the standard LCOE
+    definition; curtailed energy is not in the denominator). The summary row
+    ("System") is a different basis: Σcost / Σ energy-served-to-load, so
+    storage round-trips aren't double-counted.
     """
     cols = ["Resource", "Type", "Zone", "AnnualGen_MWh", "EnergyToLoad_MWh",
             "Curtail_MWh", "EnergyToCharge_MWh", "LCOE_$MWh", "CapExPower_$",
@@ -379,7 +383,7 @@ def asset_metrics(rs: ResultSet) -> pd.DataFrame:
     _cost_cols = ["CapExPower_$", "CapExEnergy_$", "OpEx_$", "Emissions_$", "ChargeCost_$"]
     tot_cost = df[_cost_cols].sum().sum()
     tot_e2l = df["EnergyToLoad_MWh"].sum()
-    total = {"Resource": "TOTAL", "Type": "", "Zone": "", "is_total": True,
+    total = {"Resource": "System", "Type": "", "Zone": "", "is_total": True,
              "LCOE_$MWh": (tot_cost / tot_e2l) if tot_e2l > 0 else None}
     for c in ["AnnualGen_MWh", "EnergyToLoad_MWh", "Curtail_MWh",
               "EnergyToCharge_MWh", *_cost_cols]:
