@@ -77,13 +77,21 @@ All acceptance criteria met.
   costs, NSE, breakdown, timeseries). 98 tests total, all green; AppTest clean
   on all five pages for live and archived sources.
 
-**Per-asset LCOE kept** (follow-up): the redesign initially dropped the
-per-resource levelized-cost table; it's back as `metrics.lcoe_by_resource(rs)`
-— Resource / Type / Zone / LCOE ($/MWh) / Hardware & Charging cost / Annual Gen
-/ Gen-to-Load / Curtailment / Curtail %, plus a bold TOTAL row — rendered as
-the first table in Key Metrics with its own CSV download; the zone summary
-moved into a "Capacity & generation by zone" expander below it. The synthetic
-"Demand Response" / "Unserved Energy" pseudo-rows from the old table were not
-carried over (they aren't assets). The HTML report's Key Metrics section shows
-this LCOE table (`report_lib` untouched — it just calls `.to_html()`).
-`archive_lib.compute_headline_metrics` left as-is — manifest schema unchanged.
+**Per-asset accounting** (follow-up): the redesign initially dropped the
+per-resource LCOE table; it's back — and split, on request, into two matching
+tables driven by `metrics.asset_metrics(rs)` (one row per asset + bold TOTAL,
+each with its own CSV download):
+
+- **Energy** (GWh/yr): Annual Generation (dispatch) · Energy to Load ·
+  Curtailment · Energy to Charge (batteries).
+- **LCOE & costs** ($M/yr): LCOE ($/MWh) · CapEx-Power · CapEx-Energy · OpEx
+  (O&M + fuel + start + CO2-sequestration) · Emissions · Charge Cost. The five
+  cost columns sum to GenX's `Cost` (= LCOE × dispatch); Emissions is its own
+  column because for a carbon-priced thermal plant it can be ~⅔ of that.
+
+The zone capacity/generation summary moved into a "Capacity & generation by
+zone" expander. Supply to Load also gained an `Unserved` slice. The old
+synthetic "Demand Response" / "Unserved Energy" pseudo-rows were not carried
+over (they aren't assets). HTML report shows the LCOE/cost table
+(`report_lib` untouched). `archive_lib.compute_headline_metrics` left as-is —
+manifest schema unchanged.
