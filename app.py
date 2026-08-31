@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import archive_lib
-from src import examples, run_diagnosis, run_preview, run_settings, ui, workspace
+from src import run_diagnosis, run_preview, run_settings, ui, workspace
 from src.fleet_view import RESOURCE_FILES as _RESOURCE_FILES
 
 st.set_page_config(page_title="GenX UI", layout="wide")
@@ -229,23 +229,7 @@ with st.sidebar:
     with st.expander("⚙️ Change workspace"):
         _render_workspace_setup(changing=True)
 
-    with st.expander("🧪 Load GenX.jl example"):
-        _example_cases = examples.list_example_cases()
-        if not _example_cases:
-            st.caption(f"No examples found under `{workspace.legacy_genx_root() / examples.EXAMPLES_DIRNAME}`.")
-        else:
-            _example_names = [c.name for c in _example_cases]
-            _example_choice = st.selectbox("Example", _example_names, key="_example_case_select")
-            _selected_example = next(c for c in _example_cases if c.name == _example_choice)
-            if _selected_example.description:
-                st.caption(_selected_example.description)
-            if st.button("Load into active workspace", key="_example_case_btn"):
-                try:
-                    dest = examples.import_example_case(_example_choice)
-                    st.success(f"Loaded to `{dest.name}`")
-                    st.rerun()
-                except (FileNotFoundError, FileExistsError, OSError) as e:
-                    st.error(str(e))
+    st.page_link("pages/1_Cases.py", label="🗂 Manage cases", icon=None)
 
     st.divider()
     st.link_button("📖 GenX Docs", "https://genxproject.github.io/GenX.jl/stable/", width="stretch")
@@ -257,8 +241,9 @@ st.title("GenX Runner")
 if not CASES:
     st.info(
         f"No cases found in your active workspace (`{workspace.data_dir()}`). "
-        "Use **Load GenX.jl example** in the sidebar, or add a case folder to `data/`."
+        "Create one on the **Cases** page."
     )
+    st.page_link("pages/1_Cases.py", label="Go to Cases")
     st.stop()
 
 col_controls, col_terminal = st.columns([1, 2])

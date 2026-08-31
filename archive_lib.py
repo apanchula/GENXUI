@@ -19,15 +19,9 @@ from pathlib import Path
 import pandas as pd
 
 from src import workspace
+from src.workspace import ILLEGAL_NAME_CHARS as _ILLEGAL_CHARS, RESERVED_NAMES as _RESERVED_NAMES
 
 INPUT_DIRS = ["resources", "system", "policies", "settings"]
-
-_ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-_RESERVED_NAMES = {
-    "CON", "PRN", "AUX", "NUL",
-    *(f"COM{i}" for i in range(1, 10)),
-    *(f"LPT{i}" for i in range(1, 10)),
-}
 
 
 class ArchiveError(Exception):

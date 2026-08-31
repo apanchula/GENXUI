@@ -1,9 +1,8 @@
 """Official GenX.jl example-system case discovery & import (GENXUI-2).
 
-Distinct from `workspace.py`'s "Import case from GenX.jl checkout" (which
-scans the top level of the checkout for ad hoc case folders): this module
-scans the nested `example_systems/<name>/` tree, which is what GenX.jl's own
-docs point users to as its canonical example cases.
+Scans the nested `example_systems/<name>/` tree of the GenX.jl checkout — the
+canonical example cases GenX.jl's own docs point users to — and copies a chosen
+one into the active workspace's `data/`.
 """
 from __future__ import annotations
 
@@ -54,19 +53,24 @@ def list_example_cases() -> list[ExampleCase]:
     return sorted(cases, key=lambda c: c.name)
 
 
-def import_example_case(name: str) -> Path:
+def import_example_case(name: str, dest_name: str | None = None) -> Path:
     """Copy example_systems/<name> into the active workspace's data_dir().
 
-    Raises FileNotFoundError / FileExistsError on bad input rather than
-    silently overwriting an existing case in data_dir().
+    `dest_name` (validated) sets the destination folder name; default is the
+    example's own name. Raises FileNotFoundError / ValueError / FileExistsError
+    rather than silently overwriting an existing case.
     """
     src = _examples_root() / name
     if not src.exists() or not (src / "Run.jl").exists():
         raise FileNotFoundError(f"No example case named '{name}' found under {_examples_root()}")
 
-    dest = workspace.data_dir() / name
+    target = name if dest_name is None else workspace.valid_case_name(dest_name)
+    if not target:
+        raise ValueError(f"'{dest_name}' is not a usable case name.")
+
+    dest = workspace.data_dir() / target
     if dest.exists():
-        raise FileExistsError(f"'{name}' already exists in the active workspace data directory.")
+        raise FileExistsError(f"A case named '{target}' already exists.")
 
     shutil.copytree(src, dest)
     return dest
