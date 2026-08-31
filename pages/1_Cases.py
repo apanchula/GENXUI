@@ -79,15 +79,22 @@ with st.container(border=True):
             f"No examples found under `{workspace.legacy_genx_root() / examples.EXAMPLES_DIRNAME}`."
         )
     else:
-        c1, c2, c3 = st.columns([3, 3, 1])
-        _pick = c1.selectbox("Example", [e.name for e in _ex], label_visibility="collapsed")
+        def _sync_case_name():
+            # keep the name box defaulted to the picked example until the user
+            # types their own name
+            st.session_state["new_case_name"] = st.session_state["example_pick"]
+
+        c1, c2, c3 = st.columns([3, 3, 1], vertical_alignment="bottom")
+        _pick = c1.selectbox("Example", [e.name for e in _ex], key="example_pick",
+                             on_change=_sync_case_name)
         _sel = next(e for e in _ex if e.name == _pick)
-        _name = c2.text_input("New case name", value=_pick, label_visibility="collapsed",
-                              key="new_case_name")
+        st.session_state.setdefault("new_case_name", _pick)
+        _name = c2.text_input("New case name", key="new_case_name")
         if c3.button("Create", type="primary", width="stretch"):
             if _run(examples.import_example_case, _pick, _name,
                     ok=f"Created case '{_name}'"):
                 st.session_state["_preselect_case"] = workspace.valid_case_name(_name)
+                st.session_state.pop("new_case_name", None)
                 st.rerun()
         if _sel.description:
             st.caption(_sel.description)
