@@ -321,6 +321,13 @@ with col_pb:
     if _stl.empty:
         st.warning("Run the model to see generation mix.")
     else:
+        if rs.multi_zone:
+            st.caption(
+                "Each zone's slices sum to that zone's demand. **Imports** is net "
+                "energy delivered over the network; local generation is assumed to "
+                "serve local load first. Zones with no demand aren't shown here — "
+                "see **Interzonal Transfers** below."
+            )
         _zone_order = (["System"] + [f"{z}" for z in rs.zones]) if rs.multi_zone \
             else [f"{z}" for z in rs.zones]
 
@@ -351,6 +358,77 @@ with col_pb:
         )
 
 st.divider()
+
+# ── Section 2b: Interzonal Transfers ─────────────────────────────────────────
+xfer_fig = None
+if rs.multi_zone:
+    st.subheader("Interzonal Transfers")
+    _zb = metrics.zone_balance(rs)
+    if _zb.empty:
+        st.caption("`power_balance.csv` needed to show where generation and load sit.")
+    else:
+        _n_gen_only = int((_zb["Role"] == "Generation only").sum())
+        _n_load_only = int((_zb["Role"] == "Load only").sum())
+        if _n_gen_only or _n_load_only:
+            st.caption(
+                f"{_n_gen_only} zone(s) hold generation but no load and "
+                f"{_n_load_only} hold load but no generation — every MWh they need "
+                "crosses the network."
+            )
+
+        _GWH = 1e3
+        _bar = _zb.sort_values("Zone")
+        xfer_fig = go.Figure(go.Bar(
+            x=[f"Zone {int(z)}" for z in _bar["Zone"]],
+            y=_bar["NetImport_MWh"] / _GWH,
+            marker_color=["#c0392b" if v > 0 else "#1a7a4a" for v in _bar["NetImport_MWh"]],
+            customdata=_bar[["Role"]],
+            hovertemplate="%{x}<br>%{y:,.0f} GWh/yr<br>%{customdata[0]}<extra></extra>",
+        ))
+        xfer_fig.update_layout(
+            height=300, margin=dict(t=10, b=5, l=0, r=0),
+            yaxis_title="Net import (GWh/yr)   ▲ import · ▼ export",
+        )
+        st.plotly_chart(xfer_fig, width="stretch")
+
+        _disp = pd.DataFrame({
+            "Zone": _zb["Zone"].map(lambda z: f"Zone {int(z)}"),
+            "Role": _zb["Role"],
+            "Generation (GWh)": (_zb["Generation_MWh"] / _GWH).map("{:,.0f}".format),
+            "Demand (GWh)": (_zb["Demand_MWh"] / _GWH).map("{:,.0f}".format),
+            "Net import (GWh)": (_zb["NetImport_MWh"] / _GWH).map("{:+,.0f}".format),
+            "Losses (GWh)": (_zb["Losses_MWh"] / _GWH).map("{:,.1f}".format),
+        })
+        st.dataframe(_disp, hide_index=True, width="stretch")
+
+        _lf = metrics.line_flows(rs, inputs_dir)
+        if not _lf.empty:
+            st.markdown("**Transmission lines**")
+            _lfd = pd.DataFrame({
+                "Line": _lf["Path"].where(_lf["Path"].astype(bool), _lf["Line"]),
+                "From": _lf["FromZone"].map(lambda z: f"Z{int(z)}" if pd.notna(z) else "—"),
+                "To": _lf["ToZone"].map(lambda z: f"Z{int(z)}" if pd.notna(z) else "—"),
+                "Rating (MW)": _lf["RatingMW"].map("{:,.0f}".format),
+                "Reinforced (MW)": _lf["ReinforcementMW"].map(
+                    lambda v: f"+{v:,.0f}" if v > 0 else "—"),
+                "Mean |flow| (MW)": _lf["MeanAbsFlowMW"].map("{:,.0f}".format),
+                "Peak flow (MW)": _lf["PeakFlowMW"].map("{:,.0f}".format),
+                "Peak / rating": _lf["Utilization"].map(
+                    lambda v: f"{v:.0%}" if pd.notna(v) else "—"),
+                "Hours at limit": _lf["HoursAtLimitPct"].map(
+                    lambda v: f"{v:.0f}%" if pd.notna(v) else "—"),
+            })
+            st.dataframe(_lfd, hide_index=True, width="stretch")
+            st.caption(
+                "A line spending many hours at its rating is a congestion signal — "
+                "cheaper generation on the far side can't reach the load."
+            )
+        st.download_button(
+            "⬇ Zone balance (CSV)", _zb.to_csv(index=False).encode(),
+            file_name=f"zone_balance_{case_name}.csv", mime="text/csv",
+        )
+
+    st.divider()
 
 # ── Section 3: Unserved Energy Timing ────────────────────────────────────────
 st.subheader("Unserved Energy by Time of Year")
@@ -530,6 +608,7 @@ _report_html = report_lib.build_results_html(
     lcoe_styler=lcoe_styler,
     cap_fig=cap_fig,
     pie_fig=pie_fig,
+    xfer_fig=xfer_fig,
     nse_fig=nse_fig,
     cost_fig=cost_fig,
 )

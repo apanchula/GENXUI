@@ -40,7 +40,7 @@ def resource_type(name: str) -> str:
 _TYPE_COLOR = {
     "Thermal": COLORS["thermal"], "Solar": COLORS["solar"], "Wind": COLORS["wind"],
     "Storage": COLORS["storage"], "LDS": COLORS["lds"], "Grid": COLORS["grid"],
-    "Unserved": "#c0392b", "Other": COLORS["other"],
+    "Imports": "#5dade2", "Unserved": "#c0392b", "Other": COLORS["other"],
 }
 
 

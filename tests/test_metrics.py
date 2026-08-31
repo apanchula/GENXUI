@@ -231,6 +231,81 @@ def test_asset_metrics_energy_and_cost_split():
         assert abs(tot["LCOE_$MWh"] - expect) < 1e-6
 
 
+# ── interzonal transfers / annual-output layout ────────────────────────────
+
+# A DC-OPF-style run: generation in z1, load in z3, z2 a pure transit zone.
+# Written in the long "WriteOutputs: annual" layout (no t1..tN rows).
+_ANNUAL = {
+    "capacity.csv": (
+        "Resource,Zone,StartCap,RetCap,NewCap,EndCap,EndEnergyCap,EndChargeCap\n"
+        "z1_gas,1,0,0,500,500,0,0\n"
+        "Total,,0,0,500,500,0,0\n"
+    ),
+    "power.csv": "Resource,Zone,AnnualSum\nz1_gas,1,1000000\nTotal,0,1000000\n",
+    "curtailment.csv": "Resource,Zone,AnnualSum\nz1_gas,1,0\nTotal,0,0\n",
+    "nse.csv": (
+        "Segment,Zone,AnnualSum\n1,1,0\n2,1,0\n1,2,0\n2,2,0\n1,3,0\n2,3,0\nTotal,0,0\n"
+    ),
+    "power_balance.csv": (
+        "BalanceComponent,Zone,AnnualSum\n"
+        "Generation,1,1000000\nNonserved_Energy,1,0\nTransmission_NetExport,1,-1000000\n"
+        "Transmission_Losses,1,0\nDemand,1,0\n"
+        "Generation,2,0\nNonserved_Energy,2,0\nTransmission_NetExport,2,0\n"
+        "Transmission_Losses,2,0\nDemand,2,0\n"
+        "Generation,3,0\nNonserved_Energy,3,0\nTransmission_NetExport,3,1000000\n"
+        "Transmission_Losses,3,0\nDemand,3,-1000000\n"
+    ),
+}
+
+
+def test_annual_layout_parses_generation_and_all_zones():
+    with tempfile.TemporaryDirectory() as t:
+        rs = metrics.load_results(_mk(Path(t), _ANNUAL))
+        # power_balance.csv surfaces the load-only / transit zones capacity.csv omits
+        assert rs.zones == [1, 2, 3]
+        g = metrics.generation_by_resource(rs).set_index("Resource")["AnnualGen_MWh"]
+        assert g["z1_gas"] == 1_000_000
+        assert metrics.nse_total_mwh(rs) == 0.0
+
+
+def test_zone_balance_roles_and_signs():
+    with tempfile.TemporaryDirectory() as t:
+        rs = metrics.load_results(_mk(Path(t), _ANNUAL))
+        zb = metrics.zone_balance(rs).set_index("Zone")
+        assert zb.loc[1, "Role"] == "Generation only"
+        assert zb.loc[2, "Role"] == "Transit"
+        assert zb.loc[3, "Role"] == "Load only"
+        assert zb.loc[1, "NetImport_MWh"] == -1_000_000   # exporter
+        assert zb.loc[3, "NetImport_MWh"] == 1_000_000     # importer
+        assert zb.loc[3, "Demand_MWh"] == 1_000_000        # positive magnitude
+
+
+def test_supply_to_load_attributes_imports_to_the_load_zone():
+    with tempfile.TemporaryDirectory() as t:
+        rs = metrics.load_results(_mk(Path(t), _ANNUAL))
+        stl = metrics.supply_to_load(rs)
+        # z1 generates but has no load → dropped from the per-zone mix
+        assert stl[stl["Zone"] == 1].empty
+        # z3's entire load shows up as Imports
+        z3 = stl[stl["Zone"] == 3].set_index("Type")["GenToLoad_MWh"]
+        assert list(z3.index) == ["Imports"] and abs(z3["Imports"] - 1_000_000) < 1.0
+        # System row keeps the real fuel mix (no Imports slice)
+        sys_types = set(stl[stl["Zone"] == "System"]["Type"])
+        assert sys_types == {"Thermal"}
+
+
+def test_supply_to_load_single_zone_unchanged_by_interzonal_logic():
+    with tempfile.TemporaryDirectory() as t:
+        rs = metrics.load_results(_mk(Path(t), {
+            "capacity.csv": "Resource,Zone,EndCap,EndEnergyCap\ngas,1,100,0\nTotal,,100,0\n",
+            "power.csv": "Resource,gas\nZone,1\nAnnualSum,500\nt1,5\n",
+        }))
+        stl = metrics.supply_to_load(rs)
+        assert "System" not in stl["Zone"].astype(str).tolist()
+        assert "Imports" not in stl["Type"].tolist()
+        assert stl[stl["Type"] == "Thermal"]["GenToLoad_MWh"].iloc[0] == 500
+
+
 # ── timeseries ─────────────────────────────────────────────────────────────
 
 def test_timeseries_accessors_indexed_by_hour():

@@ -30,12 +30,14 @@ def build_results_html(
     lcoe_styler=None,
     cap_fig: go.Figure | None = None,
     pie_fig: go.Figure | None = None,
+    xfer_fig: go.Figure | None = None,
     nse_fig: go.Figure | None = None,
     cost_fig: go.Figure | None = None,
 ) -> str:
     figs = [
         ("Capacity Built", cap_fig, "No capacity data available."),
         ("Supply to Load Mix", pie_fig, "No generation-mix data available."),
+        ("Interzonal Transfers", xfer_fig, "Single-zone run — no interzonal transfers."),
         ("Unserved Energy by Time of Year", nse_fig, "No unserved energy in this run."),
         ("Cost Breakdown by Resource", cost_fig, "No cost breakdown data available."),
     ]
