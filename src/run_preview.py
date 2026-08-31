@@ -190,7 +190,7 @@ def _build(case_path: Path) -> RunPreview:
         t = _count_time_index(sys_demand)
         timesteps = t
         timesteps_basis = (
-            f"full time series, no reduction"
+            "full time series, no reduction"
             + (f" — {t:,} timesteps" if t else "")
         )
         if "TimeDomainReduction" not in genx_raw:

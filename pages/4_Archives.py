@@ -114,4 +114,4 @@ with col_actions:
         if st.button("▶ Go to Runner", width="stretch", disabled=go_disabled):
             st.session_state["_preselect_case"] = restored_case
             del st.session_state["_restored_case"]
-            st.switch_page("App.py")
+            st.switch_page("app.py")

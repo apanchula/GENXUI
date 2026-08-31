@@ -156,8 +156,6 @@ def test_prefers_live_checkout_when_present(tmp_path, monkeypatch):
 # ── standalone runner ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import types
-
     class _MP:
         def setattr(self, obj, name, val):
             setattr(obj, name, val)
