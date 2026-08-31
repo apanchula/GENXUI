@@ -229,20 +229,6 @@ with st.sidebar:
     with st.expander("⚙️ Change workspace"):
         _render_workspace_setup(changing=True)
 
-    with st.expander("📥 Import case from GenX.jl checkout"):
-        _legacy_cases = workspace.list_legacy_cases()
-        if not _legacy_cases:
-            st.caption(f"No cases found under `{workspace.legacy_genx_root()}`.")
-        else:
-            _import_choice = st.selectbox("Case", _legacy_cases, key="_import_case_select")
-            if st.button("Import into active workspace", key="_import_case_btn"):
-                try:
-                    dest = workspace.import_case_from_legacy(_import_choice)
-                    st.success(f"Imported to `{dest.name}`")
-                    st.rerun()
-                except (FileNotFoundError, FileExistsError, OSError) as e:
-                    st.error(str(e))
-
     with st.expander("🧪 Load GenX.jl example"):
         _example_cases = examples.list_example_cases()
         if not _example_cases:
@@ -271,7 +257,7 @@ st.title("GenX Runner")
 if not CASES:
     st.info(
         f"No cases found in your active workspace (`{workspace.data_dir()}`). "
-        "Use **Import case from GenX.jl** in the sidebar to bring one in."
+        "Use **Load GenX.jl example** in the sidebar, or add a case folder to `data/`."
     )
     st.stop()
 

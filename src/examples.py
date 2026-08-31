@@ -58,8 +58,7 @@ def import_example_case(name: str) -> Path:
     """Copy example_systems/<name> into the active workspace's data_dir().
 
     Raises FileNotFoundError / FileExistsError on bad input rather than
-    silently overwriting an existing imported case (same contract as
-    workspace.import_case_from_legacy).
+    silently overwriting an existing case in data_dir().
     """
     src = _examples_root() / name
     if not src.exists() or not (src / "Run.jl").exists():

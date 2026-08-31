@@ -122,10 +122,10 @@ def resolve_results_dir(case_path: Path) -> Path | None:
     return max(candidates)[2]
 
 
-# ── Legacy-location helpers (import + migration notice only) ──────────────────
-# These point at the pre-GENXUI-1 locations so users aren't stranded by the
-# directory-model change: cases used to live inside `../GenX.jl/`, and
-# archives used to live in a fixed sibling `../archives/` directory.
+# ── GenX.jl checkout / legacy-location helpers ───────────────────────────────
+# legacy_genx_root() is the sibling GenX.jl clone — still used for the bundled
+# example_systems, the docs snapshot fallback, and archive git-commit tracking.
+# legacy_archive_root() backs a one-time "your old archives are over here" notice.
 
 def legacy_genx_root() -> Path:
     return _REPO_ROOT.parent / "GenX.jl"
@@ -133,33 +133,6 @@ def legacy_genx_root() -> Path:
 
 def legacy_archive_root() -> Path:
     return _REPO_ROOT.parent / "archives"
-
-
-def list_legacy_cases() -> list[str]:
-    """Cases discoverable the old way, inside `../GenX.jl/` — used by the
-    'Import case from GenX.jl' action so pre-existing cases aren't stranded."""
-    root = legacy_genx_root()
-    if not root.exists():
-        return []
-    return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "Run.jl").exists())
-
-
-def import_case_from_legacy(case_name: str) -> Path:
-    """Copy a case folder from the legacy `../GenX.jl/<case_name>` location into
-    the configured workspace's data_dir(). Raises FileNotFoundError / FileExistsError
-    on bad input rather than silently overwriting an existing imported case."""
-    import shutil
-
-    src = legacy_genx_root() / case_name
-    if not src.exists() or not (src / "Run.jl").exists():
-        raise FileNotFoundError(f"No case named '{case_name}' found under {legacy_genx_root()}")
-
-    dest = data_dir() / case_name
-    if dest.exists():
-        raise FileExistsError(f"'{case_name}' already exists in the active workspace data directory.")
-
-    shutil.copytree(src, dest)
-    return dest
 
 
 def has_unmigrated_legacy_archives() -> bool:
