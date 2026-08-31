@@ -293,13 +293,13 @@ with col_controls:
 
     st.caption(f"`{archive_lib.short_path(case_path, workspace.data_dir())}`")
 
-    if st.button("📌 Set as default case", width="stretch"):
+    if st.button("📌 Set as active case", width="stretch"):
         st.session_state["selected_case"] = case_name
-        st.toast(f"Default case set to **{case_name}** for Inputs and Results pages", icon="📌")
+        st.toast(f"Active case: **{case_name}** — Inputs and Results will open to it", icon="📌")
 
-    _default_case = st.session_state.get("selected_case")
-    if _default_case:
-        st.caption(f"Default for Inputs/Results pages: **{_default_case}**")
+    _active_case = st.session_state.get("selected_case")
+    if _active_case:
+        st.caption(f"Active case (Inputs/Results): **{_active_case}**")
 
     st.divider()
 
