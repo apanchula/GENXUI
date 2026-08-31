@@ -6,7 +6,7 @@
 policies, solver settings, and warnings for silent defaults / setting conflicts.
 
 Pure: no Streamlit, `yaml.safe_load` only, never writes. See
-docs/proposal_run_preview.md.
+docs/design/proposal_run_preview.md.
 """
 from __future__ import annotations
 

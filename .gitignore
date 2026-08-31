@@ -3,5 +3,8 @@ __pycache__/
 .env
 .venv/
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Streamlit: share config.toml, never secrets
 .streamlit/secrets.toml
-# .gitignore

@@ -1,0 +1,9 @@
+[server]
+# Poll-based watching avoids the recursive OS file-handle watchers that can
+# exhaust system resources on Windows (WinError 1450), especially when the
+# app is launched from a parent dir that also contains the large GenX.jl tree.
+# Set to "none" if you don't need hot-reload on save.
+fileWatcherType = "poll"
+
+[browser]
+gatherUsageStats = false

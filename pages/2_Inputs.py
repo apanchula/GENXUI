@@ -200,7 +200,7 @@ def render_column_help(file_stem: str, columns) -> None:
         st.caption("Source: GenX.jl docs · see the **Help** page for the full reference.")
 
 
-# ── Fleet view (resource Overview) — see docs/proposal_resource_fleet_view.md ──
+# ── Fleet view (resource Overview) — see docs/design/proposal_resource_fleet_view.md ──
 def _type_color_map(resources) -> dict[str, str]:
     m: dict[str, str] = {}
     for r in resources:

@@ -96,7 +96,7 @@ memory — close other applications and run it again"*), infeasible, unbounded,
 time-limit, missing input, package resolution, plus a generic fallback and a
 scaling warning. `stream_process()` reverts to streaming raw lines only.
 Tests: `tests/test_run_diagnosis.py` (17 cases + captured transcripts), all
-passing; `streamlit` AppTest smoke-check clean. Design: `docs/proposal_run_error_diagnosis.md`.
+passing; `streamlit` AppTest smoke-check clean. Design: `docs/design/proposal_run_error_diagnosis.md`.
 The GENXUI-2 `stream_process()` criterion is still met (package-resolution
 failure is one signature, `ArgumentError` + `not found`), just no longer via
 an inline banner line.
