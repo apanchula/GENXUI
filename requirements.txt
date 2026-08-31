@@ -1,4 +1,4 @@
-streamlit>=1.35
+streamlit>=1.45   # width="stretch" on widgets, st.columns(vertical_alignment=...)
 pandas>=2.0
 pyyaml>=6.0
 plotly>=5.0
