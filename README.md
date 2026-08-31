@@ -163,8 +163,7 @@ python -m ruff check src/ pages/
 
 Repo layout: `app.py` + `pages/` are the Streamlit UI; `src/` holds the pure logic
 (`workspace`, `metrics`, `run_preview`, `run_diagnosis`, `help_docs`, `fleet_view`, …);
-`reference/genx/` is a bundled GenX docs snapshot for the Help page; `ops/` holds the
-build-process harness.
+`reference/genx/` is a bundled GenX docs snapshot for the Help page.
 
 ---
 
