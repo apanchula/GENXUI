@@ -5,8 +5,7 @@
 (mirroring GenX's own time-domain-reduction decision), zones, resources,
 policies, solver settings, and warnings for silent defaults / setting conflicts.
 
-Pure: no Streamlit, `yaml.safe_load` only, never writes. See
-docs/design/proposal_run_preview.md.
+Pure: no Streamlit, `yaml.safe_load` only, never writes.
 """
 from __future__ import annotations
 

@@ -14,7 +14,8 @@ the app.
   the ticket ships; the authoritative trail is the `GENXUI-N:` commit messages.
 - **`task-archive/`** — completed `TASK.md` files, one per finished ticket.
 
-These were moved here from `docs/` in the repo reorg. Some of the historical
-ticket drafts still refer to paths like `docs/proposal_*.md` or
-`GENXUI-Refresh_Master.md` — those are now `docs/design/proposal_*.md` and
-`docs/ROADMAP.md`.
+These were moved here from `docs/` in the repo reorg. The historical ticket
+drafts reference `docs/proposal_*.md`, `docs/design/…`, and
+`GENXUI-Refresh_Master.md` — a set of design notes and a roadmap doc that were
+removed once the refresh shipped. Recover any of them from git history if
+needed (`git log --all --diff-filter=D -- 'docs/**'`).

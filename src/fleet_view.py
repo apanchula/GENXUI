@@ -2,8 +2,6 @@
 
 Pure — no Streamlit, no Plotly. The page (`pages/2_Inputs.py`) turns these
 frames / layout dicts into a treemap and a hub-and-spoke bus diagram.
-
-See docs/design/proposal_resource_fleet_view.md.
 """
 from __future__ import annotations
 
