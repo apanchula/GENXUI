@@ -212,24 +212,6 @@ def resolve_results_dir(case_path: Path) -> Path | None:
 # ── GenX.jl checkout / legacy-location helpers ───────────────────────────────
 # legacy_genx_root() is the sibling GenX.jl clone — still used for the bundled
 # example_systems, the docs snapshot fallback, and archive git-commit tracking.
-# legacy_archive_root() backs a one-time "your old archives are over here" notice.
 
 def legacy_genx_root() -> Path:
     return _REPO_ROOT.parent / "GenX.jl"
-
-
-def legacy_archive_root() -> Path:
-    return _REPO_ROOT.parent / "archives"
-
-
-def has_unmigrated_legacy_archives() -> bool:
-    """True if archives exist at the old fixed sibling location and that
-    location differs from the currently configured archive_dir() — signal for
-    a one-time informational notice, never a silent auto-migration."""
-    legacy = legacy_archive_root()
-    if not legacy.exists() or not any(legacy.iterdir()):
-        return False
-    root = get_workspace_root()
-    if root is None:
-        return True
-    return legacy.resolve() != archive_dir().resolve()

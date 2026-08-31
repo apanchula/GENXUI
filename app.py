@@ -143,7 +143,17 @@ def _render_run_preview(case_path: Path) -> None:
 
 # ── System summary helpers ────────────────────────────────────────────────────
 # resource file → type label comes from src.fleet_view.RESOURCE_FILES (imported
-# as _RESOURCE_FILES above); _build_summary only adds Notes for a few of them.
+# as _RESOURCE_FILES above). _build_summary frames each resource as what the
+# optimizer decides vs. what's fixed: a resource is "optimized" when it can be
+# built (New_Build) and/or retired (Can_Retire); otherwise its capacity is held
+# at its existing value. Cost columns live on the Inputs page, not here.
+
+
+def _flag(val) -> bool:
+    try:
+        return int(float(val)) == 1
+    except (TypeError, ValueError):
+        return False
 
 
 @st.cache_data
@@ -159,23 +169,36 @@ def _build_summary(cache_key: str) -> pd.DataFrame:
         if df.empty:
             continue
 
+        has_energy = rtype in ("Storage", "VRE+Storage")
+
         for _, r in df.iterrows():
             if pd.isnull(r.get("Resource")):
                 continue
 
-            max_cap = r.get("Max_Cap_MW", -1)
-            new_build = r.get("New_Build", 0)
+            can_build  = _flag(r.get("New_Build", 0))
+            can_retire = _flag(r.get("Can_Retire", 0))
+            max_cap    = float(r.get("Max_Cap_MW", -1) or -1)
+            exist_mw   = float(r.get("Existing_Cap_MW", 0) or 0)
+            exist_mwh  = float(r.get("Existing_Cap_MWh", 0) or 0) if has_energy else None
+
+            if can_build and can_retire:
+                decision = "Build / retire"
+            elif can_build:
+                decision = "Build"
+            elif can_retire:
+                decision = "Retire"
+            else:
+                decision = "Fixed"
 
             row = {
-                "Resource":           r["Resource"],
-                "Type":               rtype,
-                "New Build":          "Yes" if int(new_build) == 1 else "No",
-                "Max Cap (MW)":       "∞" if float(max_cap) < 0 else f"{float(max_cap):,.1f}",
-                "Inv ($/MW-yr)":      float(r.get("Inv_Cost_per_MWyr", 0) or 0),
-                "Inv ($/MWh-yr)":     float(r["Inv_Cost_per_MWhyr"]) if rtype in ("Storage", "VRE+Storage") and "Inv_Cost_per_MWhyr" in r.index else None,
-                "Fixed O&M ($/MW-yr)": float(r.get("Fixed_OM_Cost_per_MWyr", 0) or 0),
-                "Var O&M ($/MWh)":    float(r.get("Var_OM_Cost_per_MWh", 0) or 0),
-                "Notes":              "",
+                "Resource":            r["Resource"],
+                "Type":                rtype,
+                "Optimized":           "Yes" if (can_build or can_retire) else "No",
+                "Decision":            decision,
+                "Existing Cap (MW)":   exist_mw,
+                "Existing Cap (MWh)":  exist_mwh,
+                "Max Build (MW)":      "" if not can_build else ("∞" if max_cap < 0 else f"{max_cap:,.0f}"),
+                "Notes":               "",
             }
 
             if rtype == "Thermal":
@@ -194,7 +217,10 @@ def _build_summary(cache_key: str) -> pd.DataFrame:
 
             rows.append(row)
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if not df.empty and df["Existing Cap (MWh)"].isna().all():
+        df = df.drop(columns=["Existing Cap (MWh)"])
+    return df
 
 
 def load_system_summary(case_path: Path) -> pd.DataFrame | None:
@@ -213,18 +239,6 @@ def load_system_summary(case_path: Path) -> pd.DataFrame | None:
 with st.sidebar:
     st.subheader("Workspace")
     st.caption(f"`{workspace.get_workspace_root()}`")
-
-    if workspace.has_unmigrated_legacy_archives() and not st.session_state.get("_legacy_notice_dismissed"):
-        with st.container(border=True):
-            st.caption(
-                "ℹ️ Archived runs were found at the old default location "
-                f"(`{workspace.legacy_archive_root()}`), outside your current workspace. "
-                "They're not lost, just not shown here — set your workspace to that "
-                "folder to see them, or leave them where they are."
-            )
-            if st.button("Dismiss", key="_dismiss_legacy_notice"):
-                st.session_state["_legacy_notice_dismissed"] = True
-                st.rerun()
 
     with st.expander("⚙️ Change workspace"):
         _render_workspace_setup(changing=True)
@@ -336,16 +350,28 @@ with col_terminal:
     # ── System summary ────────────────────────────────────────────────────────
     summary = load_system_summary(case_path)
     if summary is not None:
+        n_opt = int((summary["Optimized"] == "Yes").sum())
         st.subheader("System Resources")
+        st.caption(
+            f"**{n_opt} of {len(summary)}** resources are optimized — their capacity "
+            "is a decision variable (can be built and/or retired). The rest are fixed "
+            "at their existing capacity."
+        )
+
+        def _highlight_optimized(row):
+            bg = "background-color: rgba(21, 128, 61, 0.12)" if row["Optimized"] == "Yes" else ""
+            return [bg] * len(row)
+
         st.dataframe(
-            summary,
+            summary.style.apply(_highlight_optimized, axis=1),
             hide_index=True,
             width="stretch",
             column_config={
-                "Inv ($/MW-yr)":       st.column_config.NumberColumn(format="$%d"),
-                "Inv ($/MWh-yr)":      st.column_config.NumberColumn(format="$%d"),
-                "Fixed O&M ($/MW-yr)": st.column_config.NumberColumn(format="$%d"),
-                "Var O&M ($/MWh)":     st.column_config.NumberColumn(format="$%.2f"),
+                "Existing Cap (MW)":  st.column_config.NumberColumn(format="%.1f"),
+                "Existing Cap (MWh)": st.column_config.NumberColumn(format="%.1f"),
+                "Max Build (MW)":     st.column_config.TextColumn(
+                    help="Upper bound on new capacity the optimizer may add (∞ = unbounded). Blank when the resource can't be built."
+                ),
             },
         )
         st.divider()
