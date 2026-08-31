@@ -159,6 +159,23 @@ def save_df(df: pd.DataFrame, path: Path, key: str):
         st.success(f"Saved `{path.name}`")
 
 
+def replace_file_uploader(path: Path):
+    st.divider()
+    st.markdown("**Replace file**")
+    upload = st.file_uploader(
+        f"Upload new `{path.name}` (must match column structure)",
+        type="csv",
+        key=f"upload_{path.name}",
+    )
+    if upload:
+        new_df = pd.read_csv(upload)
+        st.dataframe(new_df.head(5), width="stretch")
+        if st.button("💾 Save uploaded file", type="primary"):
+            new_df.to_csv(path, index=False)
+            st.cache_data.clear()
+            st.success(f"Saved `{path.name}` ({len(new_df):,} rows)")
+
+
 # ── Inline GenX reference (GENXUI-3) ─────────────────────────────────────────
 def render_settings_help(keys) -> None:
     """A collapsed reference block for the genx_settings.yml keys in this file."""
@@ -430,6 +447,17 @@ elif sel_path.name == "Demand_data.csv":
         st.cache_data.clear()
         st.success(f"Saved `{sel_path.name}`")
 
+# ── System / Network: full table of line parameters (not a time series) ───────
+elif sel_path.name == "Network.csv":
+    show = df.copy()
+    if show.columns[0].startswith("Unnamed:"):
+        show = show.rename(columns={show.columns[0]: "Zone"}).set_index("Zone")
+
+    st.markdown(f"**{len(show):,} row(s) · {show.shape[1]} column(s)**")
+    st.dataframe(show, width="stretch")
+
+    replace_file_uploader(sel_path)
+
 # ── System / time-series: summary + chart + upload ────────────────────────────
 else:
     numeric_cols = df.select_dtypes("number").columns.tolist()
@@ -452,17 +480,4 @@ else:
             sampled = sampled.set_index(time_col)
         st.line_chart(sampled, height=250)
 
-    st.divider()
-    st.markdown("**Replace file**")
-    upload = st.file_uploader(
-        f"Upload new `{sel_path.name}` (must match column structure)",
-        type="csv",
-        key=f"upload_{sel_path.name}",
-    )
-    if upload:
-        new_df = pd.read_csv(upload)
-        st.dataframe(new_df.head(5), width="stretch")
-        if st.button("💾 Save uploaded file", type="primary"):
-            new_df.to_csv(sel_path, index=False)
-            st.cache_data.clear()
-            st.success(f"Saved `{sel_path.name}` ({len(new_df):,} rows)")
+    replace_file_uploader(sel_path)
