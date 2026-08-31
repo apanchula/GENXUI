@@ -38,7 +38,7 @@ The full design — timestep-prediction algorithm (mirroring GenX's `load_demand
 
 ### Verification Steps
 - `streamlit run app.py` launches cleanly; select `1_three_zones` (TDR on, `TDR_results/` present) → the preview reads **1,848 timesteps**, "reusing TDR_results/ — 11 rep periods × 168 h", and lists CO₂ cap = rate-based/3 zonal, UCommit = linearized clustering, 3 zones / 2 lines.
-- Select `a-single-zone-case` → preview reflects a single-zone case; select a case with no `TimeDomainReduction` key → the "defaults to off" warning shows and timesteps = the raw `Demand_data.csv` length.
+- Select a single-zone case → preview reflects a single-zone case; select a case with no `TimeDomainReduction` key → the "defaults to off" warning shows and timesteps = the raw `Demand_data.csv` length.
 - Delete a case's `TDR_results/` (in a scratch copy) with `TimeDomainReduction: 1` → preview shows the timestep *range*, not a number.
 - `python tests/test_run_preview.py` passes (synthetic cases per the proposal's test plan: TDR off / reusing / will-cluster / ignored folder / partial folder / CO₂ cap / empty settings / missing Demand_data.csv). Plus: `build_run_preview` on each real `example_systems/*` copy returns `error is None`.
 - `streamlit` `AppTest` on `app.py` runs without exception with the preview expander present.
@@ -58,4 +58,4 @@ All acceptance criteria met. Shipped:
 
 **Deviations (both minor):** multi-stage cases (no top-level `system/`) read `inputs/inputs_p1/` and add a "this preview describes stage 1 only" warning — not spelled out in the criteria but the honest behaviour. The optional "rough model-size hint" from the proposal was not built.
 
-**Verified output** — `1_three_zones`: 1,848 timesteps, "reusing `TDR_results/` — 11 representative periods × 168 h", CO₂ = rate-based (demand) / 3 zonal, UCommit = linearized clustering, 3 zones / 2 lines, min-capacity policy (3), HiGHS simplex / no crossover. `a-single-zone-case`: 8,760 timesteps + the "TimeDomainReduction isn't set" warning.
+**Verified output** — `1_three_zones`: 1,848 timesteps, "reusing `TDR_results/` — 11 representative periods × 168 h", CO₂ = rate-based (demand) / 3 zonal, UCommit = linearized clustering, 3 zones / 2 lines, min-capacity policy (3), HiGHS simplex / no crossover. A raw single-zone case with no `TimeDomainReduction` key: 8,760 timesteps + the "TimeDomainReduction isn't set" warning.

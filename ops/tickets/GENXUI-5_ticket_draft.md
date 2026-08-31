@@ -40,7 +40,7 @@ This is Phase 5 of `GENXUI-Refresh_Master.md` §5. GENXUI-1…4 modules are comp
 ### Verification Steps
 - `streamlit run app.py` launches cleanly; open Results for a real 3-zone `example_systems` run (e.g. `1_three_zones` after a solve): Key Metrics shows per-zone groups + subtotals + a system total; Supply-to-Load shows one chart per zone plus a system chart.
 - Switch the Results source to an **archived** run — the same views render from `<archive>/results`.
-- A single-zone case (`a-single-zone-case`) renders Key Metrics as a flat resource list + total, with no empty "Zone" scaffolding.
+- A single-zone case renders Key Metrics as a flat resource list + total, with no empty "Zone" scaffolding.
 - The two new CSV download buttons produce well-formed CSVs matching the on-screen tables.
 - `python tests/test_metrics.py` passes (synthetic results dirs: multi-zone, single-zone, a resource with zero cap+gen that must be dropped, a missing optional CSV).
 - `streamlit`-testing `AppTest` on `pages/3_Results.py` runs without exception for a live case, an archived case, and the no-results guard.
